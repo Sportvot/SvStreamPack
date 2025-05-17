@@ -127,6 +127,13 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 }
             }
         }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            previewViewModel.performanceMetrics.collectLatest { metrics ->
+                binding.cpuText.text = "Threads: %d (Priority: %d)".format(metrics.threadCount, metrics.processPriority)
+                binding.memoryText.text = "Memory: %.1f MB".format(metrics.memoryUsage)
+            }
+        }
     }
 
     private fun lockOrientation() {
