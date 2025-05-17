@@ -30,6 +30,7 @@ import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
 import io.github.thibaultbee.streampack.core.elements.endpoints.composites.sinks.AbstractSink
 import io.github.thibaultbee.streampack.core.elements.endpoints.composites.sinks.ClosedException
 import io.github.thibaultbee.streampack.core.elements.endpoints.composites.sinks.SinkConfiguration
+import io.github.thibaultbee.streampack.core.logger.Logger
 import io.github.thibaultbee.streampack.ext.srt.data.mediadescriptor.SrtMediaDescriptor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,6 +74,8 @@ class SrtSink : AbstractSink() {
         }
 
         socket = CoroutineSrtSocket()
+        socket?.setSockFlag(SockOpt.SNDBUF, 32 * 1024 * 1024) // 32 MB
+        Logger.i("SRTSINK", "${socket?.sendBufferSize}")
         socket?.let {
             // Forces this value. Only works if they are null in [srtUrl]
             it.setSockFlag(SockOpt.PAYLOADSIZE, PAYLOAD_SIZE)
