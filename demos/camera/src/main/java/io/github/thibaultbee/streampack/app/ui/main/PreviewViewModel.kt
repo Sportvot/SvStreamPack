@@ -18,9 +18,12 @@ package io.github.thibaultbee.streampack.app.ui.main
 import android.Manifest
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.hardware.camera2.CaptureResult
+import android.os.BatteryManager
 import android.util.Log
 import android.util.Range
 import android.util.Rational
@@ -57,6 +60,7 @@ import io.github.thibaultbee.streampack.core.interfaces.startStream
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.core.utils.extensions.isClosedException
 import io.github.thibaultbee.streampack.ext.srt.regulator.controllers.DefaultSrtBitrateRegulatorController
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
@@ -65,6 +69,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.asStateFlow
 
 class PreviewViewModel(private val application: Application) : ObservableViewModel() {
     private val storageRepository = DataStoreRepository(application, application.dataStore)
@@ -121,6 +126,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         get() = streamer.isStreamingFlow.asLiveData()
     private val _isTryingConnectionLiveData = MutableLiveData<Boolean>()
     val isTryingConnectionLiveData: LiveData<Boolean> = _isTryingConnectionLiveData
+
+    private val _deviceTemperature = MutableStateFlow<Float?>(null)
+    val deviceTemperature = _deviceTemperature.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -203,6 +211,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         streamer.setVideoConfig(it)
                     } ?: Log.i(TAG, "Video is disabled")
                 }
+        }
+
+        viewModelScope.launch {
+            while (true) {
+                val batteryStatus: Intent? = IntentFilter(Intent.ACTION_BATTERY_CHANGED).let { filter ->
+                    application.registerReceiver(null, filter)
+                }
+                val temperature = batteryStatus?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0)?.div(10f)
+                _deviceTemperature.value = temperature
+                delay(5000) // Update every 5 seconds
+            }
         }
     }
 

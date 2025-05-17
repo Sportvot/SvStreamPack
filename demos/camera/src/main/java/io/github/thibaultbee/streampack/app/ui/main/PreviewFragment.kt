@@ -39,6 +39,7 @@ import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
 import io.github.thibaultbee.streampack.core.streamers.lifecycle.StreamerViewModelLifeCycleObserver
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.ui.views.PreviewView
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class PreviewFragment : Fragment(R.layout.main_fragment) {
@@ -116,6 +117,14 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 inflateStreamerPreview(streamer)
             } else {
                 Log.e(TAG, "Can't start preview, streamer is not a IVideoStreamer")
+            }
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            previewViewModel.deviceTemperature.collectLatest { temperature ->
+                temperature?.let {
+                    binding.temperatureText.text = "Temperature: %.1f°C".format(it)
+                }
             }
         }
     }
