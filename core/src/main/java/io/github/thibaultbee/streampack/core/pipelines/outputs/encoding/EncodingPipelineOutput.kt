@@ -49,15 +49,21 @@ import io.github.thibaultbee.streampack.core.pipelines.outputs.SurfaceWithSize
 import io.github.thibaultbee.streampack.core.pipelines.outputs.isStreaming
 import io.github.thibaultbee.streampack.core.regulator.controllers.IBitrateRegulatorController
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
+import io.github.thibaultbee.streampack.core.elements.buffers.CircularFrameBuffer
+import kotlinx.coroutines.isActive
 
 /**
  * An implementation of [IEncodingPipelineOutputInternal] that manages encoding and endpoint for
@@ -219,19 +225,8 @@ internal class EncodingPipelineOutput(
         }
     }
 
-    private val audioEncoderListener = object : IEncoderInternal.IListener {
-        override fun onError(t: Throwable) {
-            onInternalError(t)
-        }
-
-        override fun onOutputFrame(frame: Frame) {
-            audioStreamId?.let {
-                runBlocking {
-                    this@EncodingPipelineOutput.endpointInternal.write(frame, it)
-                }
-            } ?: Logger.w(TAG, "Audio frame received but audio stream is not set")
-        }
-    }
+    private val videoBuffer = CircularFrameBuffer(30) // Buffer 1 second of video at 30fps
+    private val audioBuffer = CircularFrameBuffer(300) // Buffer 1 second of audio at 48kHz
 
     private val videoEncoderListener = object : IEncoderInternal.IListener {
         override fun onError(t: Throwable) {
@@ -240,12 +235,35 @@ internal class EncodingPipelineOutput(
 
         override fun onOutputFrame(frame: Frame) {
             videoStreamId?.let {
-                runBlocking {
-                    this@EncodingPipelineOutput.endpointInternal.write(frame, it)
+                if (videoBuffer.offer(frame)) {
+                    // Don't write directly to endpoint, let the buffer handle it
+                } else {
+                    // Buffer is full, drop the frame
+                    frame.close()
                 }
             } ?: Logger.w(TAG, "Video frame received but video stream is not set")
         }
     }
+
+    private val audioEncoderListener = object : IEncoderInternal.IListener {
+        override fun onError(t: Throwable) {
+            onInternalError(t)
+        }
+
+        override fun onOutputFrame(frame: Frame) {
+            audioStreamId?.let {
+                if (audioBuffer.offer(frame)) {
+                    // Don't write directly to endpoint, let the buffer handle it
+                } else {
+                    // Buffer is full, drop the frame
+                    frame.close()
+                }
+            } ?: Logger.w(TAG, "Audio frame received but audio stream is not set")
+        }
+    }
+
+    // Add buffer processing coroutine
+    private var bufferProcessingJob: Job? = null
 
     private val _audioCodecConfigFlow = MutableStateFlow<AudioCodecConfig?>(null)
     override val audioCodecConfigFlow = _audioCodecConfigFlow.asStateFlow()
@@ -500,6 +518,42 @@ internal class EncodingPipelineOutput(
 
             streamEventListener?.onStartStream()
 
+            // Start buffer processing
+            bufferProcessingJob = CoroutineScope(coroutineDispatcher).launch {
+                while (isActive) {
+                    try {
+                        // Process video frames
+                        videoStreamId?.let { streamId ->
+                            videoBuffer.poll()?.let { frame ->
+                                try {
+                                    endpointInternal.write(frame, streamId)
+                                } catch (e: Exception) {
+                                    Logger.e(TAG, "Error writing video frame: ${e.message}")
+                                    frame.close()
+                                }
+                            }
+                        }
+
+                        // Process audio frames
+                        audioStreamId?.let { streamId ->
+                            audioBuffer.poll()?.let { frame ->
+                                try {
+                                    endpointInternal.write(frame, streamId)
+                                } catch (e: Exception) {
+                                    Logger.e(TAG, "Error writing audio frame: ${e.message}")
+                                    frame.close()
+                                }
+                            }
+                        }
+
+                        // Small delay to prevent busy waiting
+                        delay(1)
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "Error in buffer processing: ${e.message}")
+                    }
+                }
+            }
+
             audioEncoderInternal?.startStream()
             videoEncoderInternal?.startStream()
 
@@ -577,15 +631,21 @@ internal class EncodingPipelineOutput(
 
         streamEventListener?.onStopStream()
 
+        // Stop buffer processing
+        bufferProcessingJob?.cancel()
+        bufferProcessingJob = null
+
         stopStreamElements()
 
         try {
             audioEncoderInternal?.reset()
+            audioBuffer.clear()
         } catch (t: Throwable) {
             Logger.w(TAG, "Can't reset audio encoder: ${t.message}")
         }
         try {
             resetVideoEncoder()
+            videoBuffer.clear()
         } catch (t: Throwable) {
             Logger.w(TAG, "Can't reset video encoder: ${t.message}")
         }
