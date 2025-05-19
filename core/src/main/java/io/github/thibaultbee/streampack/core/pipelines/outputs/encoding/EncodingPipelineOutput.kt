@@ -226,8 +226,8 @@ internal class EncodingPipelineOutput(
     }
 
     // Optimize buffer sizes for 30fps, 5Mbps, 720p
-    private val videoBuffer = CircularFrameBuffer(30) // Buffer 2 seconds of video at 30fps
-    private val audioBuffer = CircularFrameBuffer(300, isAudio = true) // Buffer 2 seconds of audio at 48kHz
+    private val videoBuffer = CircularFrameBuffer(30) // Buffer 1 seconds of video at 30fps
+    private val audioBuffer = CircularFrameBuffer(300, isAudio = true) // Buffer 1 seconds of audio at 48kHz
 
     private val videoEncoderListener = object : IEncoderInternal.IListener {
         override fun onError(t: Throwable) {
