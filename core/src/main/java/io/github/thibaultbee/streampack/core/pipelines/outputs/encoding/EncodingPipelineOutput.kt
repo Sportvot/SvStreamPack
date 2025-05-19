@@ -282,6 +282,7 @@ internal class EncodingPipelineOutput(
         withContext(coroutineDispatcher) {
             audioConfigurationMutex.withLock {
                 setAudioCodecConfigInternal(audioCodecConfig)
+                 audioBuffer.setFrameRate(audioCodecConfig.sampleRate)
             }
         }
     }
