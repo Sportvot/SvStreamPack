@@ -366,9 +366,11 @@ internal class EncodingPipelineOutput(
         if (isReleaseRequested.get()) {
             throw IllegalStateException("Output is released")
         }
+
         withContext(coroutineDispatcher) {
             videoConfigurationMutex.withLock {
                 setVideoCodecConfigInternal(videoCodecConfig)
+                videoBuffer.setFrameRate(videoCodecConfig.fps)
             }
         }
     }
