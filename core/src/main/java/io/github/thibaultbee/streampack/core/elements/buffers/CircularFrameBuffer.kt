@@ -12,8 +12,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Maintains frame order and proper timing.
  * 
  * @param capacity The maximum number of frames the buffer can hold
+ * @param isAudio Whether this buffer is for audio frames
  */
-class CircularFrameBuffer(private val capacity: Int) {
+class CircularFrameBuffer(
+    private val capacity: Int,
+    private val isAudio: Boolean = false
+) {
     // Use PriorityBlockingQueue to maintain frame order by timestamp
     private val buffer = PriorityBlockingQueue<Frame>(capacity) { f1, f2 ->
         f1.ptsInUs.compareTo(f2.ptsInUs)
@@ -21,16 +25,23 @@ class CircularFrameBuffer(private val capacity: Int) {
     
     private val isFull = AtomicBoolean(false)
     private var lastFrameTime: Long = 0
-    private var frameInterval: Long = 0 // Will be set based on frame rate
+    private var frameInterval: Long = 0 // Will be set based on frame rate or sample rate
     
     private val _bufferUsageFlow = MutableStateFlow(0f)
     val bufferUsageFlow: StateFlow<Float> = _bufferUsageFlow.asStateFlow()
 
     /**
-     * Sets the target frame rate to calculate proper frame intervals
+     * Sets the target frame rate or sample rate to calculate proper frame intervals
      */
-    fun setFrameRate(frameRate: Int) {
-        frameInterval = (1000000L / frameRate) // Convert to microseconds
+    fun setFrameRate(rate: Int) {
+        frameInterval = if (isAudio) {
+            // For audio, calculate interval based on samples per frame
+            // Assuming 48kHz sample rate and 1024 samples per frame
+            (1000000L * 1024) / rate
+        } else {
+            // For video, calculate interval based on frame rate
+            (1000000L / rate)
+        }
     }
 
     /**
