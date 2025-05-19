@@ -306,11 +306,14 @@ internal class EncodingPipelineOutput(
             audioStreamId?.let {
                 runBlocking {
                     if (audioBuffer?.offer(frame) == true) {
-                        // Process frames from buffer
-                        while (!audioBuffer.isEmpty()) {
-                            val bufferedFrame = audioBuffer.poll()
-                            if (bufferedFrame != null) {
-                                this@EncodingPipelineOutput.endpointInternal.write(bufferedFrame, it)
+                        // Only process frames if buffer is full
+                        if (audioBuffer.isFull()) {
+                            Logger.d("CIRCULAR_BUFFER", "Audio buffer full, processing frames")
+                            while (!audioBuffer.isEmpty()) {
+                                val bufferedFrame = audioBuffer.poll()
+                                if (bufferedFrame != null) {
+                                    this@EncodingPipelineOutput.endpointInternal.write(bufferedFrame, it)
+                                }
                             }
                         }
                     }
@@ -328,11 +331,14 @@ internal class EncodingPipelineOutput(
             videoStreamId?.let {
                 runBlocking {
                     if (videoBuffer?.offer(frame) == true) {
-                        // Process frames from buffer
-                        while (!videoBuffer.isEmpty()) {
-                            val bufferedFrame = videoBuffer.poll()
-                            if (bufferedFrame != null) {
-                                this@EncodingPipelineOutput.endpointInternal.write(bufferedFrame, it)
+                        // Only process frames if buffer is full
+                        if (videoBuffer.isFull()) {
+                            Logger.d("CIRCULAR_BUFFER", "Video buffer full, processing frames")
+                            while (!videoBuffer.isEmpty()) {
+                                val bufferedFrame = videoBuffer.poll()
+                                if (bufferedFrame != null) {
+                                    this@EncodingPipelineOutput.endpointInternal.write(bufferedFrame, it)
+                                }
                             }
                         }
                     }
