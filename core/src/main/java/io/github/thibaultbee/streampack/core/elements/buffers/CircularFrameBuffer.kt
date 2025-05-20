@@ -23,6 +23,10 @@ class CircularFrameBuffer(
         private const val TAG = "CircularFrameBuffer"
     }
     
+    private var lastPollTime: Long = 0
+    private var emptyPollCount: Int = 0
+    private var lastEmptyPollLogTime: Long = 0
+    
     // Use PriorityBlockingQueue to maintain frame order by timestamp
     private val buffer = PriorityBlockingQueue<Frame>(capacity) { f1, f2 ->
         f1.ptsInUs.compareTo(f2.ptsInUs)
@@ -88,9 +92,23 @@ class CircularFrameBuffer(
      * @return The oldest frame, or null if the buffer is empty
      */
     fun poll(): Frame? {
+        val currentTime = System.nanoTime()
         val frame = buffer.poll()
         updateBufferUsage()
-        Logger.d(TAG, "[${Thread.currentThread().name}] Frame polled: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame?.ptsInUs ?: "null"}")
+        
+        if (frame == null) {
+            emptyPollCount++
+            // Log empty polls every second to avoid log spam
+            if (currentTime - lastEmptyPollLogTime > 1_000_000_000) { // 1 second in nanoseconds
+                Logger.d(TAG, "[${Thread.currentThread().name}] Empty polls in last second: $emptyPollCount")
+                emptyPollCount = 0
+                lastEmptyPollLogTime = currentTime
+            }
+        } else {
+            val timeSinceLastPoll = if (lastPollTime > 0) (currentTime - lastPollTime) / 1_000_000.0 else 0.0 // Convert to ms
+            Logger.d(TAG, "[${Thread.currentThread().name}] Frame polled: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame.ptsInUs}, timeSinceLastPoll=${timeSinceLastPoll}ms")
+            lastPollTime = currentTime
+        }
         return frame
     }
 
