@@ -4,13 +4,14 @@ import io.github.thibaultbee.streampack.core.elements.data.Frame
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.util.concurrent.PriorityBlockingQueue
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import io.github.thibaultbee.streampack.core.logger.Logger
+import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.locks.Condition
 
 /**
  * A circular buffer implementation for frames to handle back pressure between encoder and muxer.
- * Maintains frame order and proper timing.
+ * Maintains frame order and proper timing using a true circular buffer pattern.
  * 
  * @param capacity The maximum number of frames the buffer can hold
  * @param isAudio Whether this buffer is for audio frames
@@ -23,18 +24,23 @@ class CircularFrameBuffer(
         private const val TAG = "CircularFrameBuffer"
     }
     
+    // Circular buffer state
+    private val elements = AtomicInteger(0)
+    private var entrance = 0
+    private var exit = 0
+    private val frames = Array<Frame?>(capacity) { null }
+    
+    // Synchronization
+    private val lock = ReentrantLock()
+    private val notEmpty = lock.newCondition()
+    private val notFull = lock.newCondition()
+    
     private var lastPollTime: Long = 0
     private var emptyPollCount: Int = 0
     private var lastEmptyPollLogTime: Long = 0
     private var lastOfferTime: Long = 0
     private var maxBufferSize: Int = 0
     
-    // Use PriorityBlockingQueue to maintain frame order by timestamp
-    private val buffer = PriorityBlockingQueue<Frame>(capacity) { f1, f2 ->
-        f1.ptsInUs.compareTo(f2.ptsInUs)
-    }
-    
-    private val isFull = AtomicBoolean(false)
     private var lastFrameTime: Long = 0
     private var frameInterval: Long = 0 // Will be set based on frame rate or sample rate
     
@@ -56,74 +62,117 @@ class CircularFrameBuffer(
     }
 
     /**
-     * Adds a frame to the buffer. If the buffer is full, the oldest frame will be dropped.
+     * Adds a frame to the buffer. If the buffer is full, waits until space is available.
      * Maintains proper timing by adjusting frame timestamps.
      * 
      * @param frame The frame to add
-     * @return true if the frame was added successfully, false if the buffer is full and the frame was dropped
+     * @return true if the frame was added successfully, false if the operation was interrupted
      */
     fun offer(frame: Frame): Boolean {
-        val currentTime = System.nanoTime()
-        val timeSinceLastOffer = if (lastOfferTime > 0) (currentTime - lastOfferTime) / 1_000_000.0 else 0.0
+        val currentTime = System.nanoTime() / 1000 // Convert to microseconds
+        val timeSinceLastOffer = if (lastOfferTime > 0) currentTime - lastOfferTime else 0
         lastOfferTime = currentTime
 
-        if (buffer.size >= capacity) {
-            // Buffer is full, drop the oldest frame
-            val droppedFrame = buffer.poll()
-            droppedFrame?.close()
-            Logger.d(TAG, "[${Thread.currentThread().name}] Buffer full (${buffer.size}/$capacity), dropped oldest frame")
-        }
-
-        // Adjust frame timing if needed
-        if (lastFrameTime > 0 && frameInterval > 0) {
-            val expectedTime = lastFrameTime + frameInterval
-            if (frame.ptsInUs < expectedTime) {
-                // Frame is too early, adjust its timestamp
-                val oldTime = frame.ptsInUs
-                frame.ptsInUs = expectedTime
-                Logger.d(TAG, "[${Thread.currentThread().name}] Adjusted frame timing: $oldTime -> ${frame.ptsInUs} (interval: $frameInterval)")
+        lock.lock()
+        try {
+            // Wait if buffer is full
+            while (elements.get() >= capacity) {
+                try {
+                    notFull.await()
+                } catch (e: InterruptedException) {
+                    Logger.w(TAG, "Offer interrupted while waiting for space")
+                    return false
+                }
             }
+
+            // Adjust frame timing if needed
+            if (lastFrameTime > 0 && frameInterval > 0) {
+                val expectedTime = lastFrameTime + frameInterval
+                if (frame.ptsInUs < expectedTime) {
+                    // Frame is too early, adjust its timestamp
+                    frame.ptsInUs = expectedTime
+                    Logger.d(TAG, "[${Thread.currentThread().name}] Adjusted frame timing: $expectedTime")
+                }
+            }
+            
+            lastFrameTime = frame.ptsInUs
+            
+            // Add frame to buffer
+            frames[entrance] = frame
+            entrance = (entrance + 1) % capacity
+            elements.incrementAndGet()
+            
+            // Update buffer usage
+            updateBufferUsage()
+            
+            // Track maximum buffer size
+            val currentSize = elements.get()
+            if (currentSize > maxBufferSize) {
+                maxBufferSize = currentSize
+                Logger.d(TAG, "[${Thread.currentThread().name}] New max buffer size: $maxBufferSize/$capacity (${(maxBufferSize.toFloat()/capacity)*100}%)")
+            }
+            
+            // Signal that buffer is not empty
+            notEmpty.signal()
+            
+            Logger.d(TAG, "[${Thread.currentThread().name}] Frame offered: size=${elements.get()}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame.ptsInUs}, timeSinceLastOffer=${timeSinceLastOffer}µs")
+            return true
+        } finally {
+            lock.unlock()
         }
-        
-        lastFrameTime = frame.ptsInUs
-        val result = buffer.offer(frame)
-        updateBufferUsage()
-        
-        // Track maximum buffer size
-        if (buffer.size > maxBufferSize) {
-            maxBufferSize = buffer.size
-            Logger.d(TAG, "[${Thread.currentThread().name}] New max buffer size: $maxBufferSize/$capacity (${(maxBufferSize.toFloat()/capacity)*100}%)")
-        }
-        
-        Logger.d(TAG, "[${Thread.currentThread().name}] Frame offered: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame.ptsInUs}, timeSinceLastOffer=${timeSinceLastOffer}ms")
-        return result
     }
 
     /**
      * Retrieves and removes the oldest frame from the buffer.
+     * If the buffer is empty, waits until a frame is available.
      * 
-     * @return The oldest frame, or null if the buffer is empty
+     * @return The oldest frame, or null if the operation was interrupted
      */
     fun poll(): Frame? {
-        val currentTime = System.nanoTime()
-        val frame = buffer.poll()
-        updateBufferUsage()
+        val currentTime = System.nanoTime() / 1000 // Convert to microseconds
         
-        if (frame == null) {
-            emptyPollCount++
-            // Log empty polls every second to avoid log spam
-            if (currentTime - lastEmptyPollLogTime > 1_000_000_000) { // 1 second in nanoseconds
-                Logger.d(TAG, "[${Thread.currentThread().name}] Empty polls in last second: $emptyPollCount")
-                emptyPollCount = 0
-                lastEmptyPollLogTime = currentTime
+        lock.lock()
+        try {
+            // Wait if buffer is empty
+            while (elements.get() == 0) {
+                try {
+                    emptyPollCount++
+                    // Log empty polls every second to avoid log spam
+                    if (currentTime - lastEmptyPollLogTime > 1_000_000) { // 1 second in microseconds
+                        Logger.d(TAG, "[${Thread.currentThread().name}] Empty polls in last second: $emptyPollCount")
+                        emptyPollCount = 0
+                        lastEmptyPollLogTime = currentTime
+                    }
+                    notEmpty.await()
+                } catch (e: InterruptedException) {
+                    Logger.w(TAG, "Poll interrupted while waiting for frame")
+                    return null
+                }
             }
-        } else {
-            val timeSinceLastPoll = if (lastPollTime > 0) (currentTime - lastPollTime) / 1_000_000.0 else 0.0
-            val timeSinceFrameCreation = (currentTime / 1_000_000.0) - (frame.ptsInUs / 1000.0)
-            Logger.d(TAG, "[${Thread.currentThread().name}] Frame polled: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame.ptsInUs}, timeSinceLastPoll=${timeSinceLastPoll}ms, latency=${timeSinceFrameCreation}ms")
-            lastPollTime = currentTime
+
+            // Get frame from buffer
+            val frame = frames[exit]
+            frames[exit] = null // Clear the slot
+            exit = (exit + 1) % capacity
+            elements.decrementAndGet()
+            
+            // Update buffer usage
+            updateBufferUsage()
+            
+            // Signal that buffer is not full
+            notFull.signal()
+            
+            if (frame != null) {
+                val timeSinceLastPoll = if (lastPollTime > 0) currentTime - lastPollTime else 0
+                val timeSinceFrameCreation = currentTime - (frame.ptsInUs / 1000)
+                Logger.d(TAG, "[${Thread.currentThread().name}] Frame polled: size=${elements.get()}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame.ptsInUs}, timeSinceLastPoll=${timeSinceLastPoll}µs, latency=${timeSinceFrameCreation}µs")
+                lastPollTime = currentTime
+            }
+            
+            return frame
+        } finally {
+            lock.unlock()
         }
-        return frame
     }
 
     /**
@@ -131,35 +180,53 @@ class CircularFrameBuffer(
      * 
      * @return The oldest frame, or null if the buffer is empty
      */
-    fun peek(): Frame? = buffer.peek()
+    fun peek(): Frame? {
+        lock.lock()
+        try {
+            return if (elements.get() > 0) frames[exit] else null
+        } finally {
+            lock.unlock()
+        }
+    }
 
     /**
      * Returns the current number of frames in the buffer.
      */
-    fun size(): Int = buffer.size
+    fun size(): Int = elements.get()
 
     /**
      * Returns true if the buffer is empty.
      */
-    fun isEmpty(): Boolean = buffer.isEmpty()
+    fun isEmpty(): Boolean = elements.get() == 0
 
     /**
      * Returns true if the buffer is full.
      */
-    fun isFull(): Boolean = buffer.size >= capacity
+    fun isFull(): Boolean = elements.get() >= capacity
 
     /**
      * Clears all frames from the buffer.
      */
     fun clear() {
-        buffer.forEach { it.close() }
-        buffer.clear()
-        lastFrameTime = 0
-        maxBufferSize = 0
-        updateBufferUsage()
+        lock.lock()
+        try {
+            for (i in 0 until capacity) {
+                frames[i]?.close()
+                frames[i] = null
+            }
+            entrance = 0
+            exit = 0
+            elements.set(0)
+            lastFrameTime = 0
+            maxBufferSize = 0
+            updateBufferUsage()
+            notFull.signalAll()
+        } finally {
+            lock.unlock()
+        }
     }
 
     private fun updateBufferUsage() {
-        _bufferUsageFlow.value = buffer.size.toFloat() / capacity
+        _bufferUsageFlow.value = elements.get().toFloat() / capacity
     }
 } 
