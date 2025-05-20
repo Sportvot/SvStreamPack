@@ -29,12 +29,44 @@ class Pes(
     val stream: Stream,
     private val hasPcr: Boolean,
 ) : TS(muxerListener, stream.pid) {
+    private var lastPcr: Long? = null
+    private var lastPts: Long? = null
+    private var lastDts: Long? = null
+    private val pcrInterval = 100000L // 100ms PCR interval
+
     fun write(frame: Frame) {
+        val currentTime = TimeUtils.currentTime()
         val programClockReference = if (hasPcr) {
-            TimeUtils.currentTime()
+            // Only update PCR if enough time has passed or it's the first frame
+            if (lastPcr == null || (currentTime - lastPcr!!) >= pcrInterval) {
+                lastPcr = currentTime
+                currentTime
+            } else {
+                lastPcr
+            }
         } else {
             null
         }
+
+        // Ensure PTS/DTS are monotonically increasing
+        val pts = if (lastPts == null || frame.ptsInUs > lastPts!!) {
+            frame.ptsInUs
+        } else {
+            lastPts!! + 1
+        }
+        lastPts = pts
+
+        val dts = if (frame.dtsInUs != null) {
+            if (lastDts == null || frame.dtsInUs!! > lastDts!!) {
+                frame.dtsInUs
+            } else {
+                lastDts!! + 1
+            }
+        } else {
+            null
+        }
+        lastDts = dts
+
         val adaptationField = AdaptationField(
             discontinuityIndicator = stream.discontinuity,
             randomAccessIndicator = frame.isKeyFrame,
@@ -44,11 +76,11 @@ class Pes(
         val header = PesHeader(
             streamId = fromMimeType(stream.config.mimeType).value,
             payloadLength = frame.buffer.remaining(),
-            pts = frame.ptsInUs,
-            dts = frame.dtsInUs
+            pts = pts,
+            dts = dts
         )
 
-        write(frame.buffer, adaptationField.toByteBuffer(), header.toByteBuffer(), true, frame.ptsInUs)
+        write(frame.buffer, adaptationField.toByteBuffer(), header.toByteBuffer(), true, pts)
     }
 
     enum class StreamId(val value: Short) {

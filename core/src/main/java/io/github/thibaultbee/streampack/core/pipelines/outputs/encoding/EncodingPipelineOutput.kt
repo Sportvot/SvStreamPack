@@ -59,6 +59,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.PriorityBlockingQueue
+import java.util.ArrayDeque
 
 /**
  * An implementation of [IEncodingPipelineOutputInternal] that manages encoding and endpoint for
@@ -206,13 +207,12 @@ internal class EncodingPipelineOutput(
         private val capacity: Int,
         private val isAudio: Boolean
     ) {
-        private val buffer = PriorityBlockingQueue<Frame>(capacity) { f1, f2 ->
-            f1.ptsInUs.compareTo(f2.ptsInUs)
-        }
-        
-        private var lastFrameTime: Long = 0
-        private var frameInterval: Long = 0
-        
+        private val buffer = ArrayDeque<Frame>(capacity)
+        private var lastFrameTime = 0L
+        private var frameInterval = 0L
+        private var baseTimestamp = 0L
+        private var isFirstFrame = true
+
         fun setFrameRate(rate: Int) {
             frameInterval = if (isAudio) {
                 // For audio, calculate interval based on samples per frame
@@ -232,13 +232,32 @@ internal class EncodingPipelineOutput(
                 Logger.d("CIRCULAR_BUFFER", "${if (isAudio) "Audio" else "Video"} buffer full, dropped oldest frame")
             }
 
-            // Only adjust timestamps for video frames
-            if (!isAudio && lastFrameTime > 0 && frameInterval > 0) {
-                val expectedTime = lastFrameTime + frameInterval
-                if (frame.ptsInUs < expectedTime) {
-                    // Frame is too early, adjust its timestamp
-                    frame.ptsInUs = expectedTime
-                    Logger.d("CIRCULAR_BUFFER", "Adjusted video frame timestamp to $expectedTime")
+            if (isFirstFrame) {
+                baseTimestamp = frame.ptsInUs
+                isFirstFrame = false
+                lastFrameTime = frame.ptsInUs
+                if (!isAudio && frameInterval == 0L) {
+                    // For video, calculate expected frame interval based on first two frames
+                    frameInterval = 0
+                }
+            } else {
+                if (!isAudio) {
+                    // For video frames, ensure consistent timing
+                    if (frameInterval == 0L && buffer.size > 0) {
+                        // Calculate frame interval from actual frame timing
+                        frameInterval = (frame.ptsInUs - lastFrameTime) / buffer.size
+                    }
+                    
+                    val expectedTime = lastFrameTime + frameInterval
+                    if (frame.ptsInUs < expectedTime) {
+                        // Frame is too early, adjust its timestamp
+                        frame.ptsInUs = expectedTime
+                        Logger.d("CIRCULAR_BUFFER", "Adjusted video frame timestamp to $expectedTime")
+                    }
+                } else {
+                    // For audio frames, maintain relative timing from base timestamp
+                    val relativeTime = frame.ptsInUs - baseTimestamp
+                    frame.ptsInUs = baseTimestamp + relativeTime
                 }
             }
             
