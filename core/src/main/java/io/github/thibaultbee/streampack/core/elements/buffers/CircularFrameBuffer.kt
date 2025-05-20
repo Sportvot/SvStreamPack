@@ -1,7 +1,6 @@
 package io.github.thibaultbee.streampack.core.elements.buffers
 
 import io.github.thibaultbee.streampack.core.elements.data.Frame
-import io.github.thibaultbee.streampack.core.logger.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,10 +18,6 @@ class CircularFrameBuffer(
     private val capacity: Int,
     private val isAudio: Boolean = false
 ) {
-    companion object {
-        private const val TAG = "CIRCULAR_BUFFER"
-    }
-
     // Use PriorityBlockingQueue to maintain frame order by timestamp
     private val buffer = PriorityBlockingQueue<Frame>(capacity) { f1, f2 ->
         f1.ptsInUs.compareTo(f2.ptsInUs)
@@ -36,10 +31,6 @@ class CircularFrameBuffer(
     private val _bufferUsageFlow = MutableStateFlow(0f)
     val bufferUsageFlow: StateFlow<Float> = _bufferUsageFlow.asStateFlow()
 
-    init {
-        Logger.d(TAG, "Initialized ${if (isAudio) "audio" else "video"} buffer with capacity $capacity")
-    }
-
     /**
      * Sets the target frame rate or sample rate to calculate proper frame intervals
      */
@@ -52,7 +43,6 @@ class CircularFrameBuffer(
             // For video, calculate interval based on frame rate
             (1000000L / rate)
         }
-        Logger.d(TAG, "Set ${if (isAudio) "audio" else "video"} frame rate to $rate Hz (interval: ${frameInterval}us)")
     }
 
     /**
@@ -75,18 +65,14 @@ class CircularFrameBuffer(
             val scaledCapacity = baseCapacity + ((bitrate - minBitrate) * (maxCapacity - baseCapacity) / (maxBitrate - minBitrate))
             scaledCapacity.coerceIn(baseCapacity, maxCapacity)
         }
-        Logger.d(TAG, "Setting target bitrate to ${bitrate/1000}kbps, new buffer capacity: $newCapacity (current: $capacity)")
-        
         // Resize buffer if needed
         if (newCapacity != capacity) {
             val newBuffer = PriorityBlockingQueue<Frame>(newCapacity) { f1, f2 ->
                 f1.ptsInUs.compareTo(f2.ptsInUs)
             }
-            val oldSize = buffer.size
             buffer.drainTo(newBuffer)
             buffer.clear()
             buffer.addAll(newBuffer)
-            Logger.d(TAG, "Resized buffer from $capacity to $newCapacity, transferred $oldSize frames")
         }
     }
 
@@ -98,15 +84,10 @@ class CircularFrameBuffer(
      * @return true if the frame was added successfully, false if the buffer is full and the frame was dropped
      */
     fun offer(frame: Frame): Boolean {
-        val currentSize = buffer.size
-        val isKeyFrame = frame.isKeyFrame
-        
         if (buffer.size >= capacity) {
             if (isAudio) {
                 // For audio, drop the oldest frame
-                val droppedFrame = buffer.poll()
-                Logger.d(TAG, "Buffer full (size: $currentSize), dropping oldest audio frame at ${droppedFrame?.ptsInUs}us")
-                droppedFrame?.close()
+                buffer.poll()?.close()
             } else {
                 // For video, try to drop non-key frames first
                 val iterator = buffer.iterator()
@@ -115,7 +96,6 @@ class CircularFrameBuffer(
                     val existingFrame = iterator.next()
                     if (!existingFrame.isKeyFrame) {
                         iterator.remove()
-                        Logger.d(TAG, "Buffer full (size: $currentSize), dropping non-key frame at ${existingFrame.ptsInUs}us")
                         existingFrame.close()
                         dropped = true
                         break
@@ -123,9 +103,7 @@ class CircularFrameBuffer(
                 }
                 if (!dropped) {
                     // If no non-key frames found, drop the oldest frame
-                    val droppedFrame = buffer.poll()
-                    Logger.d(TAG, "Buffer full (size: $currentSize), no non-key frames to drop, dropping oldest frame at ${droppedFrame?.ptsInUs}us")
-                    droppedFrame?.close()
+                    buffer.poll()?.close()
                 }
             }
         }
@@ -135,22 +113,13 @@ class CircularFrameBuffer(
             val expectedTime = lastFrameTime + frameInterval
             if (frame.ptsInUs < expectedTime) {
                 // Frame is too early, adjust its timestamp
-                val oldTime = frame.ptsInUs
                 frame.ptsInUs = expectedTime
-                Logger.d(TAG, "Adjusted frame timestamp from $oldTime to ${frame.ptsInUs}us (interval: $frameInterval)")
             }
         }
         
         lastFrameTime = frame.ptsInUs
         val result = buffer.offer(frame)
         updateBufferUsage()
-        
-        if (result) {
-            Logger.d(TAG, "Added ${if (isKeyFrame) "key" else "non-key"} frame at ${frame.ptsInUs}us, buffer size: ${buffer.size}")
-        } else {
-            Logger.w(TAG, "Failed to add frame at ${frame.ptsInUs}us, buffer size: ${buffer.size}")
-        }
-        
         return result
     }
 
@@ -161,11 +130,6 @@ class CircularFrameBuffer(
      */
     fun poll(): Frame? {
         val frame = buffer.poll()
-        if (frame != null) {
-            Logger.d(TAG, "Polled frame at ${frame.ptsInUs}us, remaining buffer size: ${buffer.size}")
-        } else {
-            Logger.d(TAG, "Buffer empty, no frame to poll")
-        }
         updateBufferUsage()
         return frame
     }
@@ -196,17 +160,13 @@ class CircularFrameBuffer(
      * Clears all frames from the buffer.
      */
     fun clear() {
-        val size = buffer.size
         buffer.forEach { it.close() }
         buffer.clear()
         lastFrameTime = 0
-        Logger.d(TAG, "Cleared buffer, removed $size frames")
         updateBufferUsage()
     }
 
     private fun updateBufferUsage() {
-        val usage = buffer.size.toFloat() / capacity
-        _bufferUsageFlow.value = usage
-        Logger.v(TAG, "Buffer usage: ${(usage * 100).toInt()}% (${buffer.size}/$capacity)")
+        _bufferUsageFlow.value = buffer.size.toFloat() / capacity
     }
 } 
