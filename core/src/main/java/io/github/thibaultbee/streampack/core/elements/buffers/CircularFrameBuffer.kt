@@ -26,7 +26,6 @@ class CircularFrameBuffer(
     private val isFull = AtomicBoolean(false)
     private var lastFrameTime: Long = 0
     private var frameInterval: Long = 0 // Will be set based on frame rate or sample rate
-    private var targetBitrate: Int = 0 // Track target bitrate for adaptive buffer sizing
     
     private val _bufferUsageFlow = MutableStateFlow(0f)
     val bufferUsageFlow: StateFlow<Float> = _bufferUsageFlow.asStateFlow()
@@ -46,66 +45,16 @@ class CircularFrameBuffer(
     }
 
     /**
-     * Sets the target bitrate for adaptive buffer sizing
-     */
-    fun setTargetBitrate(bitrate: Int) {
-        targetBitrate = bitrate
-        // Adjust buffer capacity based on bitrate
-        // For higher bitrates, we want to keep more frames to maintain quality
-        val newCapacity = if (isAudio) {
-            capacity // Keep audio buffer size fixed
-        } else {
-            // For video, scale buffer size with bitrate
-            // Base capacity is 30 frames (1 second at 30fps)
-            // Scale up to 60 frames for high bitrates
-            val baseCapacity = 30
-            val maxCapacity = 60
-            val minBitrate = 2_000_000 // 2 Mbps
-            val maxBitrate = 8_000_000 // 8 Mbps
-            val scaledCapacity = baseCapacity + ((bitrate - minBitrate) * (maxCapacity - baseCapacity) / (maxBitrate - minBitrate))
-            scaledCapacity.coerceIn(baseCapacity, maxCapacity)
-        }
-        // Resize buffer if needed
-        if (newCapacity != capacity) {
-            val newBuffer = PriorityBlockingQueue<Frame>(newCapacity) { f1, f2 ->
-                f1.ptsInUs.compareTo(f2.ptsInUs)
-            }
-            buffer.drainTo(newBuffer)
-            buffer.clear()
-            buffer.addAll(newBuffer)
-        }
-    }
-
-    /**
-     * Adds a frame to the buffer. If the buffer is full, drops frames intelligently.
-     * For video, prioritizes keeping key frames and drops non-key frames when possible.
+     * Adds a frame to the buffer. If the buffer is full, the oldest frame will be dropped.
+     * Maintains proper timing by adjusting frame timestamps.
      * 
      * @param frame The frame to add
      * @return true if the frame was added successfully, false if the buffer is full and the frame was dropped
      */
     fun offer(frame: Frame): Boolean {
         if (buffer.size >= capacity) {
-            if (isAudio) {
-                // For audio, drop the oldest frame
-                buffer.poll()?.close()
-            } else {
-                // For video, try to drop non-key frames first
-                val iterator = buffer.iterator()
-                var dropped = false
-                while (iterator.hasNext()) {
-                    val existingFrame = iterator.next()
-                    if (!existingFrame.isKeyFrame) {
-                        iterator.remove()
-                        existingFrame.close()
-                        dropped = true
-                        break
-                    }
-                }
-                if (!dropped) {
-                    // If no non-key frames found, drop the oldest frame
-                    buffer.poll()?.close()
-                }
-            }
+            // Buffer is full, drop the oldest frame
+            buffer.poll()?.close()
         }
 
         // Adjust frame timing if needed
