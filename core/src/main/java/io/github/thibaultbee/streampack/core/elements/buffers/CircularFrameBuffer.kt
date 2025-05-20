@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.PriorityBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
+import io.github.thibaultbee.streampack.core.logger.Logger
 
 /**
  * A circular buffer implementation for frames to handle back pressure between encoder and muxer.
@@ -18,6 +19,10 @@ class CircularFrameBuffer(
     private val capacity: Int,
     private val isAudio: Boolean = false
 ) {
+    companion object {
+        private const val TAG = "CircularFrameBuffer"
+    }
+    
     // Use PriorityBlockingQueue to maintain frame order by timestamp
     private val buffer = PriorityBlockingQueue<Frame>(capacity) { f1, f2 ->
         f1.ptsInUs.compareTo(f2.ptsInUs)
@@ -54,7 +59,9 @@ class CircularFrameBuffer(
     fun offer(frame: Frame): Boolean {
         if (buffer.size >= capacity) {
             // Buffer is full, drop the oldest frame
-            buffer.poll()?.close()
+            val droppedFrame = buffer.poll()
+            droppedFrame?.close()
+            Logger.d(TAG, "Buffer full (${buffer.size}/$capacity), dropped oldest frame")
         }
 
         // Adjust frame timing if needed
@@ -62,13 +69,16 @@ class CircularFrameBuffer(
             val expectedTime = lastFrameTime + frameInterval
             if (frame.ptsInUs < expectedTime) {
                 // Frame is too early, adjust its timestamp
+                val oldTime = frame.ptsInUs
                 frame.ptsInUs = expectedTime
+                Logger.d(TAG, "Adjusted frame timing: $oldTime -> ${frame.ptsInUs} (interval: $frameInterval)")
             }
         }
         
         lastFrameTime = frame.ptsInUs
         val result = buffer.offer(frame)
         updateBufferUsage()
+        Logger.d(TAG, "Frame offered: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}")
         return result
     }
 
@@ -80,6 +90,7 @@ class CircularFrameBuffer(
     fun poll(): Frame? {
         val frame = buffer.poll()
         updateBufferUsage()
+        Logger.d(TAG, "Frame polled: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}")
         return frame
     }
 
