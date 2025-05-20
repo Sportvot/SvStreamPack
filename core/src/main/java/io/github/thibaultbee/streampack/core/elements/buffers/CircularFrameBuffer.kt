@@ -61,7 +61,7 @@ class CircularFrameBuffer(
             // Buffer is full, drop the oldest frame
             val droppedFrame = buffer.poll()
             droppedFrame?.close()
-            Logger.d(TAG, "Buffer full (${buffer.size}/$capacity), dropped oldest frame")
+            Logger.d(TAG, "[${Thread.currentThread().name}] Buffer full (${buffer.size}/$capacity), dropped oldest frame")
         }
 
         // Adjust frame timing if needed
@@ -71,14 +71,14 @@ class CircularFrameBuffer(
                 // Frame is too early, adjust its timestamp
                 val oldTime = frame.ptsInUs
                 frame.ptsInUs = expectedTime
-                Logger.d(TAG, "Adjusted frame timing: $oldTime -> ${frame.ptsInUs} (interval: $frameInterval)")
+                Logger.d(TAG, "[${Thread.currentThread().name}] Adjusted frame timing: $oldTime -> ${frame.ptsInUs} (interval: $frameInterval)")
             }
         }
         
         lastFrameTime = frame.ptsInUs
         val result = buffer.offer(frame)
         updateBufferUsage()
-        Logger.d(TAG, "Frame offered: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}")
+        Logger.d(TAG, "[${Thread.currentThread().name}] Frame offered: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame.ptsInUs}")
         return result
     }
 
@@ -90,7 +90,7 @@ class CircularFrameBuffer(
     fun poll(): Frame? {
         val frame = buffer.poll()
         updateBufferUsage()
-        Logger.d(TAG, "Frame polled: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}")
+        Logger.d(TAG, "[${Thread.currentThread().name}] Frame polled: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame?.ptsInUs ?: "null"}")
         return frame
     }
 
