@@ -282,7 +282,7 @@ internal class EncodingPipelineOutput(
         withContext(coroutineDispatcher) {
             audioConfigurationMutex.withLock {
                 setAudioCodecConfigInternal(audioCodecConfig)
-                 audioBuffer.setFrameRate(audioCodecConfig.sampleRate)
+                audioBuffer.setFrameRate(audioCodecConfig.sampleRate)
             }
         }
     }
@@ -373,6 +373,7 @@ internal class EncodingPipelineOutput(
             videoConfigurationMutex.withLock {
                 setVideoCodecConfigInternal(videoCodecConfig)
                 videoBuffer.setFrameRate(videoCodecConfig.fps)
+                videoBuffer.setTargetBitrate(videoCodecConfig.startBitrate)
             }
         }
     }
@@ -793,6 +794,12 @@ internal class EncodingPipelineOutput(
         } else {
             false
         }
+    }
+
+    // Add bitrate change handler
+     fun setBitrate(bitrate: Int) {
+        videoEncoderInternal?.bitrate = bitrate
+        videoBuffer.setTargetBitrate(bitrate)
     }
 
     companion object {
