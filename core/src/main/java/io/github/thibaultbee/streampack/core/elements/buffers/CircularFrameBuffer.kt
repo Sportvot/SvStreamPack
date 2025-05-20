@@ -26,6 +26,8 @@ class CircularFrameBuffer(
     private var lastPollTime: Long = 0
     private var emptyPollCount: Int = 0
     private var lastEmptyPollLogTime: Long = 0
+    private var lastOfferTime: Long = 0
+    private var maxBufferSize: Int = 0
     
     // Use PriorityBlockingQueue to maintain frame order by timestamp
     private val buffer = PriorityBlockingQueue<Frame>(capacity) { f1, f2 ->
@@ -61,6 +63,10 @@ class CircularFrameBuffer(
      * @return true if the frame was added successfully, false if the buffer is full and the frame was dropped
      */
     fun offer(frame: Frame): Boolean {
+        val currentTime = System.nanoTime()
+        val timeSinceLastOffer = if (lastOfferTime > 0) (currentTime - lastOfferTime) / 1_000_000.0 else 0.0
+        lastOfferTime = currentTime
+
         if (buffer.size >= capacity) {
             // Buffer is full, drop the oldest frame
             val droppedFrame = buffer.poll()
@@ -82,7 +88,14 @@ class CircularFrameBuffer(
         lastFrameTime = frame.ptsInUs
         val result = buffer.offer(frame)
         updateBufferUsage()
-        Logger.d(TAG, "[${Thread.currentThread().name}] Frame offered: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame.ptsInUs}")
+        
+        // Track maximum buffer size
+        if (buffer.size > maxBufferSize) {
+            maxBufferSize = buffer.size
+            Logger.d(TAG, "[${Thread.currentThread().name}] New max buffer size: $maxBufferSize/$capacity (${(maxBufferSize.toFloat()/capacity)*100}%)")
+        }
+        
+        Logger.d(TAG, "[${Thread.currentThread().name}] Frame offered: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame.ptsInUs}, timeSinceLastOffer=${timeSinceLastOffer}ms")
         return result
     }
 
@@ -105,8 +118,9 @@ class CircularFrameBuffer(
                 lastEmptyPollLogTime = currentTime
             }
         } else {
-            val timeSinceLastPoll = if (lastPollTime > 0) (currentTime - lastPollTime) / 1_000_000.0 else 0.0 // Convert to ms
-            Logger.d(TAG, "[${Thread.currentThread().name}] Frame polled: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame.ptsInUs}, timeSinceLastPoll=${timeSinceLastPoll}ms")
+            val timeSinceLastPoll = if (lastPollTime > 0) (currentTime - lastPollTime) / 1_000_000.0 else 0.0
+            val timeSinceFrameCreation = (currentTime / 1_000_000.0) - (frame.ptsInUs / 1000.0)
+            Logger.d(TAG, "[${Thread.currentThread().name}] Frame polled: size=${buffer.size}/$capacity, usage=${_bufferUsageFlow.value}, pts=${frame.ptsInUs}, timeSinceLastPoll=${timeSinceLastPoll}ms, latency=${timeSinceFrameCreation}ms")
             lastPollTime = currentTime
         }
         return frame
@@ -141,6 +155,7 @@ class CircularFrameBuffer(
         buffer.forEach { it.close() }
         buffer.clear()
         lastFrameTime = 0
+        maxBufferSize = 0
         updateBufferUsage()
     }
 
