@@ -74,40 +74,56 @@ class RtmpSink(
     override suspend fun write(packet: Packet) =
         withContext(dispatcher) {
             if (isOnError) {
+                Logger.e(TAG, "Write failed: Sink is in error state")
                 return@withContext -1
             }
 
             if (!(isOpenFlow.value)) {
-                Logger.w(TAG, "Socket is not connected, dropping packet")
+                Logger.e(TAG, "Write failed: Socket is not connected, dropping packet")
                 return@withContext -1
             }
 
             val socket = requireNotNull(socket) { "Socket is not initialized" }
 
             try {
+                Logger.d(TAG, "Writing packet of size ${packet.buffer.remaining()} bytes")
                 return@withContext socket.write(packet.buffer)
             } catch (t: Throwable) {
                 isOnError = true
+                Logger.e(TAG, "Error while writing packet to socket: ${t.message}", t)
                 close()
-                Logger.e(TAG, "Error while writing packet to socket", t)
                 throw ClosedException(t)
             }
         }
 
     override suspend fun startStream() {
         withContext(dispatcher) {
+            Logger.i(TAG, "Starting RTMP stream")
             val socket = requireNotNull(socket) { "Socket is not initialized" }
-            socket.connectStream()
+            try {
+                socket.connectStream()
+                Logger.i(TAG, "RTMP stream started successfully")
+            } catch (t: Throwable) {
+                Logger.e(TAG, "Failed to start RTMP stream: ${t.message}", t)
+                throw t
+            }
         }
     }
 
     override suspend fun stopStream() {
+        Logger.i(TAG, "Stopping RTMP stream")
         // No need to stop stream
     }
 
     override suspend fun close() {
+        Logger.i(TAG, "Closing RTMP sink")
         withContext(dispatcher) {
-            socket?.close()
+            try {
+                socket?.close()
+                Logger.i(TAG, "RTMP socket closed successfully")
+            } catch (t: Throwable) {
+                Logger.e(TAG, "Error while closing RTMP socket: ${t.message}", t)
+            }
             _isOpenFlow.emit(false)
         }
     }

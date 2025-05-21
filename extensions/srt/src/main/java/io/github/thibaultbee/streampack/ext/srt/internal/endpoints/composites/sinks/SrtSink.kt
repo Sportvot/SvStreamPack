@@ -30,6 +30,7 @@ import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
 import io.github.thibaultbee.streampack.core.elements.endpoints.composites.sinks.AbstractSink
 import io.github.thibaultbee.streampack.core.elements.endpoints.composites.sinks.ClosedException
 import io.github.thibaultbee.streampack.core.elements.endpoints.composites.sinks.SinkConfiguration
+import io.github.thibaultbee.streampack.core.logger.Logger
 import io.github.thibaultbee.streampack.ext.srt.data.mediadescriptor.SrtMediaDescriptor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -118,43 +119,61 @@ class SrtSink : AbstractSink() {
 
     override suspend fun write(packet: Packet): Int {
         if (isOnError) {
+            Logger.e(TAG, "Write failed: Sink is in error state")
             return -1
         }
 
         // Pick up completionException if any
         completionException?.let {
             isOnError = true
+            Logger.e(TAG, "Write failed: Completion exception occurred: ${it.message}", it)
             throw ClosedException(it)
         }
 
         val socket = requireNotNull(socket) { "SrtEndpoint is not initialized" }
 
         try {
+            Logger.d(TAG, "Writing packet of size ${packet.buffer.remaining()} bytes")
             return socket.send(packet.buffer, buildMsgCtrl(packet))
         } catch (t: Throwable) {
             isOnError = true
             if (completionException != null) {
-                // Socket already closed
+                Logger.e(TAG, "Write failed: Socket already closed with exception: ${completionException?.message}", completionException)
                 throw ClosedException(completionException!!)
             }
+            Logger.e(TAG, "Write failed: Error while sending packet: ${t.message}", t)
             close()
             throw ClosedException(t)
         }
     }
 
     override suspend fun startStream() {
+        Logger.i(TAG, "Starting SRT stream")
         val socket = requireNotNull(socket) { "SrtEndpoint is not initialized" }
         require(socket.isConnected) { "SrtEndpoint should be connected at this point" }
 
-        socket.setSockFlag(SockOpt.MAXBW, 0L)
-        socket.setSockFlag(SockOpt.INPUTBW, bitrate)
+        try {
+            socket.setSockFlag(SockOpt.MAXBW, 0L)
+            socket.setSockFlag(SockOpt.INPUTBW, bitrate)
+            Logger.i(TAG, "SRT stream started successfully with bitrate: $bitrate")
+        } catch (t: Throwable) {
+            Logger.e(TAG, "Failed to start SRT stream: ${t.message}", t)
+            throw t
+        }
     }
 
     override suspend fun stopStream() {
+        Logger.i(TAG, "Stopping SRT stream")
     }
 
     override suspend fun close() {
-        socket?.close()
+        Logger.i(TAG, "Closing SRT sink")
+        try {
+            socket?.close()
+            Logger.i(TAG, "SRT socket closed successfully")
+        } catch (t: Throwable) {
+            Logger.e(TAG, "Error while closing SRT socket: ${t.message}", t)
+        }
         _isOpenFlow.emit(false)
     }
 
