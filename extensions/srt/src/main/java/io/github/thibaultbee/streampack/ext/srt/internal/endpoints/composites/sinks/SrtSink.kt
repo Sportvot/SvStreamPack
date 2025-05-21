@@ -42,6 +42,9 @@ class SrtSink : AbstractSink() {
     private var socket: CoroutineSrtSocket? = null
     private var completionException: Throwable? = null
     private var isOnError: Boolean = false
+    private var connectionStartTime: Long = 0
+    private var lastBandwidthLogTime: Long = 0
+    private var lastBandwidth: Double = 0.0
 
     private var bitrate = 0L
 
@@ -81,9 +84,12 @@ class SrtSink : AbstractSink() {
             it.setSockFlag(SockOpt.TRANSTYPE, Transtype.LIVE)
             completionException = null
             isOnError = false
+            connectionStartTime = System.currentTimeMillis()
+            lastBandwidthLogTime = connectionStartTime
             it.socketContext.invokeOnCompletion { t ->
+                val connectionDuration = System.currentTimeMillis() - connectionStartTime
                 completionException = t
-                Logger.e(TAG, "SRT socket completion with error: ${t?.message}", t)
+                Logger.e(TAG, "SRT socket completion after ${connectionDuration}ms with error: ${t?.message}", t)
                 runBlocking {
                     this@SrtSink.close()
                 }
@@ -93,6 +99,7 @@ class SrtSink : AbstractSink() {
                 Logger.i(TAG, "SRT connection established successfully")
                 // Log initial connection stats
                 val stats = it.bistats(clear = true, instantaneous = true)
+                lastBandwidth = stats.mbpsBandwidth
                 Logger.i(TAG, "Initial SRT stats - RTT: ${stats.msRTT}ms, Bandwidth: ${stats.mbpsBandwidth} mb/s")
             } catch (t: Throwable) {
                 Logger.e(TAG, "Failed to establish SRT connection: ${t.message}", t)
@@ -146,8 +153,24 @@ class SrtSink : AbstractSink() {
         try {
             // Log connection stats periodically
             val stats = socket.bistats(clear = true, instantaneous = true)
-            if (stats.msRTT > 1000) { // Log if RTT is high
+            val currentTime = System.currentTimeMillis()
+            
+            // Log if RTT is high
+            if (stats.msRTT > 1000) {
                 Logger.w(TAG, "High RTT detected: ${stats.msRTT}ms, Bandwidth: ${stats.mbpsBandwidth} mb/s")
+            }
+            
+            // Log significant bandwidth changes
+            if (Math.abs(stats.mbpsBandwidth - lastBandwidth) > 0.5) { // Log if bandwidth changes by more than 0.5 mb/s
+                Logger.w(TAG, "Significant bandwidth change detected: ${lastBandwidth} -> ${stats.mbpsBandwidth} mb/s")
+                lastBandwidth = stats.mbpsBandwidth
+            }
+            
+            // Log connection duration every 30 seconds
+            if (currentTime - lastBandwidthLogTime > 30000) {
+                val connectionDuration = currentTime - connectionStartTime
+                Logger.i(TAG, "Connection duration: ${connectionDuration}ms, Current stats - RTT: ${stats.msRTT}ms, Bandwidth: ${stats.mbpsBandwidth} mb/s")
+                lastBandwidthLogTime = currentTime
             }
             
             Logger.d(TAG, "Writing packet of size ${packet.buffer.remaining()} bytes")
