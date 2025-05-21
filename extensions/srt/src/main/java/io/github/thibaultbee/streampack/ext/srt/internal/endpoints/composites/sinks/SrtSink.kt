@@ -120,7 +120,7 @@ class SrtSink : AbstractSink() {
         } else {
             null
         }
-        return if (packet.ts == 0L) {
+        val msgCtrl = if (packet.ts == 0L) {
             if (boundary != null) {
                 MsgCtrl(boundary = boundary)
             } else {
@@ -133,6 +133,10 @@ class SrtSink : AbstractSink() {
                 MsgCtrl(srcTime = packet.ts)
             }
         }
+        Logger.d(TAG, "Built MsgCtrl - Boundary: $boundary, Timestamp: ${packet.ts}, " +
+            "FirstPacket: ${if (packet is SrtPacket) packet.isFirstPacketFrame else "N/A"}, " +
+            "LastPacket: ${if (packet is SrtPacket) packet.isLastPacketFrame else "N/A"}")
+        return msgCtrl
     }
 
     override suspend fun write(packet: Packet): Int {
@@ -173,8 +177,34 @@ class SrtSink : AbstractSink() {
                 lastBandwidthLogTime = currentTime
             }
             
-            Logger.d(TAG, "Writing packet of size ${packet.buffer.remaining()} bytes")
-            return socket.send(packet.buffer, buildMsgCtrl(packet))
+            // Log packet details before sending
+            Logger.d(TAG, "Preparing to write packet - Size: ${packet.buffer.remaining()} bytes, " +
+                "Timestamp: ${packet.ts}, " +
+                "Type: ${packet.javaClass.simpleName}, " +
+                "Buffer position: ${packet.buffer.position()}, " +
+                "Buffer limit: ${packet.buffer.limit()}")
+            
+            // Create message control
+            val msgCtrl = buildMsgCtrl(packet)
+            
+            // Log socket state before sending
+            Logger.d(TAG, "Socket state before send - Connected: ${socket.isConnected}, " +
+                "Send buffer available: ${stats.byteAvailSndBuf}, " +
+                "Receive buffer available: ${stats.byteAvailRcvBuf}")
+            
+            // Send the packet
+            val bytesSent = socket.send(packet.buffer, msgCtrl)
+            
+            // Log send result
+            Logger.d(TAG, "Packet write result - Bytes sent: $bytesSent, " +
+                "Buffer remaining: ${packet.buffer.remaining()}, " +
+                "Buffer position: ${packet.buffer.position()}")
+            
+            if (bytesSent <= 0) {
+                Logger.w(TAG, "Warning: No bytes sent for packet")
+            }
+            
+            return bytesSent
         } catch (t: Throwable) {
             isOnError = true
             if (completionException != null) {
@@ -195,7 +225,7 @@ class SrtSink : AbstractSink() {
         try {
             socket.setSockFlag(SockOpt.MAXBW, 0L)
             socket.setSockFlag(SockOpt.INPUTBW, bitrate)
-            Logger.i(TAG, "SRT stream started successfully with bitrate: $bitrate")
+            Logger.i(TAG, "SRT stream started successfully with bitrate: $bitrate ")
         } catch (t: Throwable) {
             Logger.e(TAG, "Failed to start SRT stream: ${t.message}", t)
             throw t
