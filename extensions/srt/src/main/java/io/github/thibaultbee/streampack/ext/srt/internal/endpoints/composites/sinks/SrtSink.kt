@@ -63,6 +63,7 @@ class SrtSink : AbstractSink() {
         open(SrtMediaDescriptor(mediaDescriptor))
 
     private suspend fun open(mediaDescriptor: SrtMediaDescriptor) {
+        Logger.i(TAG, "Opening SRT connection to ${mediaDescriptor.srtUrl}")
         if (mediaDescriptor.srtUrl.mode != null) {
             require(mediaDescriptor.srtUrl.mode == Mode.CALLER) { "Invalid mode: ${mediaDescriptor.srtUrl.mode}. Only caller supported." }
         }
@@ -82,11 +83,21 @@ class SrtSink : AbstractSink() {
             isOnError = false
             it.socketContext.invokeOnCompletion { t ->
                 completionException = t
+                Logger.e(TAG, "SRT socket completion with error: ${t?.message}", t)
                 runBlocking {
                     this@SrtSink.close()
                 }
             }
-            it.connect(mediaDescriptor.srtUrl)
+            try {
+                it.connect(mediaDescriptor.srtUrl)
+                Logger.i(TAG, "SRT connection established successfully")
+                // Log initial connection stats
+                val stats = it.bistats(clear = true, instantaneous = true)
+                Logger.i(TAG, "Initial SRT stats - RTT: ${stats.msRTT}ms, Bandwidth: ${stats.mbpsBandwidth} mb/s")
+            } catch (t: Throwable) {
+                Logger.e(TAG, "Failed to establish SRT connection: ${t.message}", t)
+                throw t
+            }
         }
         _isOpenFlow.emit(true)
     }
@@ -133,6 +144,12 @@ class SrtSink : AbstractSink() {
         val socket = requireNotNull(socket) { "SrtEndpoint is not initialized" }
 
         try {
+            // Log connection stats periodically
+            val stats = socket.bistats(clear = true, instantaneous = true)
+            if (stats.msRTT > 1000) { // Log if RTT is high
+                Logger.w(TAG, "High RTT detected: ${stats.msRTT}ms, Bandwidth: ${stats.mbpsBandwidth} mb/s")
+            }
+            
             Logger.d(TAG, "Writing packet of size ${packet.buffer.remaining()} bytes")
             return socket.send(packet.buffer, buildMsgCtrl(packet))
         } catch (t: Throwable) {
