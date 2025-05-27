@@ -72,7 +72,9 @@ class PesHeader(
         buffer.putShort(0) // start code is 0x000001
         buffer.put(1)
         buffer.put(streamId)
-        val packetLength = if (pesPacketLength > 0xFFFF) {
+        // For video streams (streamId >= 0xE0), always set PES packet length to 0
+        // For audio streams, use actual length if it fits in 16 bits
+        val packetLength = if (streamId >= 0xE0.toShort() || pesPacketLength > 0xFFFF) {
             0
         } else {
             pesPacketLength
