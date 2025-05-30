@@ -47,7 +47,7 @@ internal class AudioRecordEffect {
             return when (effectType) {
                 AudioEffect.EFFECT_TYPE_AEC -> AcousticEchoCanceler.isAvailable()
                 AudioEffect.EFFECT_TYPE_AGC -> AutomaticGainControl.isAvailable()
-                AudioEffect.EFFECT_TYPE_NS -> NoiseSuppressor.isAvailable()
+//                AudioEffect.EFFECT_TYPE_NS -> NoiseSuppressor.isAvailable()
                 else -> AudioEffect.queryEffects()
                     .any { it.type == effectType }
             }
@@ -61,7 +61,7 @@ internal class AudioRecordEffect {
          */
         fun isValidUUID(uuid: UUID): Boolean {
             return uuid == AudioEffect.EFFECT_TYPE_AEC ||
-                    uuid == AudioEffect.EFFECT_TYPE_AGC ||
+                    uuid == AudioEffect.EFFECT_TYPE_AGC
                     // uuid == AudioEffect.EFFECT_TYPE_BASS_BOOST || // Not for AudioRecord
                     // ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) &&
                     //        uuid == AudioEffect.EFFECT_TYPE_DYNAMICS_PROCESSING) || // Not for AudioRecord
@@ -70,7 +70,7 @@ internal class AudioRecordEffect {
                     //((Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) &&
                     //        uuid == AudioEffect.EFFECT_TYPE_HAPTIC_GENERATOR) || // Not for AudioRecord
                     // uuid == AudioEffect.EFFECT_TYPE_LOUDNESS_ENHANCER || // Not for AudioRecord
-                    uuid == AudioEffect.EFFECT_TYPE_NS
+//                    uuid == AudioEffect.EFFECT_TYPE_NS
             // uuid == AudioEffect.EFFECT_TYPE_PRESET_REVERB || // Not for AudioRecord
             // uuid == AudioEffect.EFFECT_TYPE_VIRTUALIZER // Not for AudioRecord
             // uuid == AudioEffect.EFFECT_TYPE_VISUALIZER // Not for AudioRecord
@@ -106,7 +106,7 @@ internal class AudioRecordEffect {
                 return when (effectType) {
                     AudioEffect.EFFECT_TYPE_AEC -> AcousticEchoCancelerFactory()
                     AudioEffect.EFFECT_TYPE_AGC -> AutomaticGainControlFactory()
-                    AudioEffect.EFFECT_TYPE_NS -> NoiseSuppressorFactory()
+//                    AudioEffect.EFFECT_TYPE_NS -> NoiseSuppressorFactory()
                     else -> throw IllegalArgumentException("Unknown effect type: $effectType")
                 }
             }

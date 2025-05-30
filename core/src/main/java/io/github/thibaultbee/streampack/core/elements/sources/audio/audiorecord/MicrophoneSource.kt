@@ -63,7 +63,7 @@ internal class MicrophoneSource : AudioRecordSource() {
 class MicrophoneSourceFactory(
     effects: Set<UUID> = setOf(
         AudioEffect.EFFECT_TYPE_AEC,
-        AudioEffect.EFFECT_TYPE_NS
+//        AudioEffect.EFFECT_TYPE_NS
     )
 ) :
     AudioRecordSourceFactory(effects) {
