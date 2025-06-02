@@ -16,7 +16,6 @@
 package io.github.thibaultbee.streampack.app.ui.main
 
 import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
@@ -34,7 +33,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         binding = MainActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -45,12 +43,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         bindProperties()
-    }
-
-    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
-        super.onConfigurationChanged(newConfig)
-        // Force landscape orientation
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
     }
 
     private fun bindProperties() {
