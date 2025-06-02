@@ -94,6 +94,8 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             } else {
                 binding.liveButton.isChecked = false
             }
+            // Update MainActivity's streaming state
+            (activity as? MainActivity)?.setStreamingState(isStreaming)
         }
 
         previewViewModel.isTryingConnectionLiveData.observe(viewLifecycleOwner) { isWaitingForConnection ->
