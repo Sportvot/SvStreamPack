@@ -205,6 +205,7 @@
                 android:onCheckedChanged="@{(_, checked) -> viewmodel.setMute(checked)}"
                 android:textOff=""
                 android:textOn=""
+                android:checked="@{!viewmodel.streamerLiveData.audioProcessor.muted}"
                 app:tint="@android:color/white" />
 
 
