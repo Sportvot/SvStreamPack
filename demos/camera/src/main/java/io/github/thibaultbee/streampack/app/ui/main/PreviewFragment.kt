@@ -39,6 +39,7 @@ import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
 import io.github.thibaultbee.streampack.core.streamers.lifecycle.StreamerViewModelLifeCycleObserver
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.ui.views.PreviewView
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class PreviewFragment : Fragment(R.layout.main_fragment) {
@@ -93,6 +94,8 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             } else {
                 binding.liveButton.isChecked = false
             }
+            // Update MainActivity's streaming state
+            (activity as? MainActivity)?.setStreamingState(isStreaming)
         }
 
         previewViewModel.isTryingConnectionLiveData.observe(viewLifecycleOwner) { isWaitingForConnection ->
@@ -118,6 +121,21 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 Log.e(TAG, "Can't start preview, streamer is not a IVideoStreamer")
             }
         }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            previewViewModel.deviceTemperature.collectLatest { temperature ->
+                temperature?.let {
+                    binding.temperatureText.text = "Temperature: %.1f°C".format(it)
+                }
+            }
+        }
+
+//        viewLifecycleOwner.lifecycleScope.launch {
+//            previewViewModel.performanceMetrics.collectLatest { metrics ->
+//                binding.cpuText.text = "Threads: %d (Priority: %d)".format(metrics.threadCount, metrics.processPriority)
+//                binding.memoryText.text = "Memory: %.1f MB".format(metrics.memoryUsage)
+//            }
+//        }
     }
 
     private fun lockOrientation() {

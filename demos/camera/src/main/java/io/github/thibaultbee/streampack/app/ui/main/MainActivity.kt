@@ -21,6 +21,7 @@ import android.util.Log
 import android.view.Menu
 import android.view.MenuInflater
 import android.widget.PopupMenu
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import io.github.thibaultbee.streampack.app.R
 import io.github.thibaultbee.streampack.app.databinding.MainActivityBinding
@@ -28,6 +29,7 @@ import io.github.thibaultbee.streampack.app.ui.settings.SettingsActivity
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: MainActivityBinding
+    private var isStreaming = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,10 +55,18 @@ class MainActivity : AppCompatActivity() {
         val popup = PopupMenu(this, binding.actions)
         val inflater: MenuInflater = popup.menuInflater
         inflater.inflate(R.menu.actions, popup.menu)
+        
+        // Disable settings menu item if streaming
+        popup.menu.findItem(R.id.action_settings)?.isEnabled = !isStreaming
+        
         popup.show()
         popup.setOnMenuItemClickListener {
             if (it.itemId == R.id.action_settings) {
-                goToSettingsActivity()
+                if (!isStreaming) {
+                    goToSettingsActivity()
+                } else {
+                    Toast.makeText(this, "Settings cannot be changed while streaming", Toast.LENGTH_SHORT).show()
+                }
                 true
             } else {
                 Log.e(TAG, "Unknown menu item ${it.itemId}")
@@ -72,7 +82,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.actions, menu)
+        // Disable settings menu item if streaming
+        menu.findItem(R.id.action_settings)?.isEnabled = !isStreaming
         return true
+    }
+
+    fun setStreamingState(streaming: Boolean) {
+        isStreaming = streaming
+        // Update menu items when streaming state changes
+        invalidateOptionsMenu()
     }
 
     companion object {

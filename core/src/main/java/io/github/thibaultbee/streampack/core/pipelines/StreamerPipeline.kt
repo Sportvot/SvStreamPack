@@ -694,6 +694,7 @@ open class StreamerPipeline(
 
     private suspend fun startInputStreams(output: IPipelineOutput) =
         withContext(coroutineDispatcher) {
+            Logger.i(TAG, "Starting input streams for output: ${output.javaClass.simpleName}")
             if (output.withAudio) {
                 require(audioSourceFlow.value != null) { "At least one audio source must be provided" }
             }
@@ -703,6 +704,7 @@ open class StreamerPipeline(
             val isAudioSourceStreaming = if (output.withAudio) {
                 val input = requireNotNull(audioInput)
                 val wasStreaming = input.isStreamingFlow.value
+                Logger.i(TAG, "Starting audio input stream")
                 input.startStream()
                 wasStreaming
             } else {
@@ -711,8 +713,10 @@ open class StreamerPipeline(
             if (output.withVideo) {
                 val input = requireNotNull(videoInput)
                 try {
+                    Logger.i(TAG, "Starting video input stream")
                     input.startStream()
                 } catch (t: Throwable) {
+                    Logger.e(TAG, "Failed to start video input stream: ${t.message}", t)
                     // Restore audio source state
                     if (!isAudioSourceStreaming) {
                         audioInput?.stopStream()
@@ -721,6 +725,7 @@ open class StreamerPipeline(
                 }
             }
             _isStreamingFlow.emit(true)
+            Logger.i(TAG, "Input streams started successfully")
         }
 
     /**
@@ -729,15 +734,18 @@ open class StreamerPipeline(
      * If an [IEncodingPipelineOutput] is not opened, it won't start the stream.
      */
     suspend fun startStream() = withContext(coroutineDispatcher) {
+        Logger.i(TAG, "Starting stream")
         if (isReleaseRequested.get()) {
+            Logger.e(TAG, "Cannot start stream: Pipeline is released")
             throw IllegalStateException("Pipeline is released")
         }
         safeOutputCall { outputs ->
             outputs.keys.forEach {
                 try {
+                    Logger.i(TAG, "Starting output: ${it.javaClass.simpleName}")
                     it.startStream()
                 } catch (t: Throwable) {
-                    Logger.w(TAG, "startStream: Can't start output $it: ${t.message}")
+                    Logger.e(TAG, "Failed to start output ${it.javaClass.simpleName}: ${t.message}", t)
                 }
             }
         }
@@ -747,19 +755,23 @@ open class StreamerPipeline(
      * Stops all inputs streams.
      */
     private suspend fun stopInputStreams() = withContext(coroutineDispatcher) {
+        Logger.i(TAG, "Stopping input streams")
         try {
             try {
                 audioInput?.stopStream()
+                Logger.i(TAG, "Audio input stream stopped")
             } catch (t: Throwable) {
-                Logger.w(TAG, "stopStream: Can't stop audio input: ${t.message}")
+                Logger.e(TAG, "Failed to stop audio input stream: ${t.message}", t)
             }
             try {
                 videoInput?.stopStream()
+                Logger.i(TAG, "Video input stream stopped")
             } catch (t: Throwable) {
-                Logger.w(TAG, "stopStream: Can't stop video input: ${t.message}")
+                Logger.e(TAG, "Failed to stop video input stream: ${t.message}", t)
             }
         } finally {
             _isStreamingFlow.emit(false)
+            Logger.i(TAG, "Input streams stopped")
         }
     }
 

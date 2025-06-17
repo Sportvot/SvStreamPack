@@ -106,7 +106,7 @@ internal class MediaProjectionAudioSource(
 class MediaProjectionAudioSourceFactory(
     effects: Set<UUID> = setOf(
         AudioEffect.EFFECT_TYPE_AEC,
-        AudioEffect.EFFECT_TYPE_NS
+//        AudioEffect.EFFECT_TYPE_NS
     ),
     private val activityResult: ActivityResult? = null
 ) : AudioRecordSourceFactory(effects) {
