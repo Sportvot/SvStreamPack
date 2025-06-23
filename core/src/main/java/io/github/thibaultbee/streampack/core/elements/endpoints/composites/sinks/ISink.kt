@@ -50,4 +50,7 @@ interface ISink {
      * Metrics of the sink.
      */
     val metrics: Any
+
+    val sendRateMbps: Double
+        get() = 0.0
 }

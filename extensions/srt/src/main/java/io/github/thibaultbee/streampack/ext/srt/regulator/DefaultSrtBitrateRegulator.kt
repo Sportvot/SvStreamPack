@@ -48,7 +48,6 @@ class DefaultSrtBitrateRegulator(
 
         val byteSentTotal = stats.byteSentTotal
 
-        Log.d("StatsLogger", "Byte Sent Total: $byteSentTotal")
 
         if (currentVideoBitrate > bitrateRegulatorConfig.videoBitrateRange.lower) {
             val newVideoBitrate = when {
