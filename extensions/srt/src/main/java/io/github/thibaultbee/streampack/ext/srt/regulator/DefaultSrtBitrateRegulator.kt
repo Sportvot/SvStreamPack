@@ -15,6 +15,7 @@
  */
 package io.github.thibaultbee.streampack.ext.srt.regulator
 
+import android.util.Log
 import io.github.thibaultbee.srtdroid.core.models.Stats
 import io.github.thibaultbee.streampack.core.configuration.BitrateRegulatorConfig
 import kotlin.math.max
@@ -44,6 +45,10 @@ class DefaultSrtBitrateRegulator(
 
     override fun update(stats: Stats, currentVideoBitrate: Int, currentAudioBitrate: Int) {
         val estimatedBandwidth = (stats.mbpsBandwidth * 1000000).toInt()
+
+        val byteSentTotal = stats.byteSentTotal
+
+        Log.d("StatsLogger", "Byte Sent Total: $byteSentTotal")
 
         if (currentVideoBitrate > bitrateRegulatorConfig.videoBitrateRange.lower) {
             val newVideoBitrate = when {
