@@ -46,7 +46,9 @@ import io.github.thibaultbee.streampack.app.utils.isEmpty
 import io.github.thibaultbee.streampack.app.utils.setNextCameraId
 import io.github.thibaultbee.streampack.app.utils.toggleBackToFront
 import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.UriMediaDescriptor
+import io.github.thibaultbee.streampack.core.elements.endpoints.DynamicEndpoint
 import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
+import io.github.thibaultbee.streampack.core.elements.endpoints.composites.CompositeEndpoint
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.IAudioRecordSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MicrophoneSourceFactory
 import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.BitmapSourceFactory
@@ -132,6 +134,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     private val _deviceTemperature = MutableStateFlow<Float?>(null)
     val deviceTemperature = _deviceTemperature.asStateFlow()
+
+    private val _sendRateMbps = MutableStateFlow<Double?>(null)
+    val sendRateMbps = _sendRateMbps.asStateFlow()
 
     private val _performanceMetrics = MutableStateFlow<PerformanceMetrics>(PerformanceMetrics())
     val performanceMetrics = _performanceMetrics.asStateFlow()
@@ -230,12 +235,27 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
         viewModelScope.launch {
             while (true) {
+
+                // temp update
                 val batteryStatus: Intent? = IntentFilter(Intent.ACTION_BATTERY_CHANGED).let { filter ->
                     application.registerReceiver(null, filter)
                 }
                 val temperature = batteryStatus?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0)?.div(10f)
-                _deviceTemperature.value = temperature
-                delay(5000) // Update every 5 seconds
+                _deviceTemperature.value = temperature;
+
+                // send rate update
+                var sendRateMbpsNew = 0.0;
+
+                try {
+                    val endpoint = (streamer.endpoint as DynamicEndpoint).getSrtEndpoint() as CompositeEndpoint;
+                    sendRateMbpsNew = endpoint.sink.sendRateMbps;
+                }  catch (e: Throwable) {
+                    Log.e(TAG, "send rate error", e)
+                    // Handle the exception
+                }
+
+                _sendRateMbps.value = sendRateMbpsNew;
+                delay(1000) // Update every 5 seconds
             }
         }
 
@@ -300,6 +320,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                 bitrateRegulatorConfig = bitrateRegulatorConfig
                             )
                         )
+
                     }
                 }
             } catch (e: Throwable) {

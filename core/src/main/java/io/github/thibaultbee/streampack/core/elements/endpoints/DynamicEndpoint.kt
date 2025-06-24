@@ -194,7 +194,7 @@ open class DynamicEndpoint(
         return tsContentEndpoint!!
     }
 
-    private fun getSrtEndpoint(): IEndpointInternal {
+    fun getSrtEndpoint(): IEndpointInternal {
         if (srtEndpoint == null) {
             srtEndpoint = CompositeEndpoints.createSrtEndpoint(null)
         }

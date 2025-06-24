@@ -40,6 +40,14 @@
             app:layout_constraintTop_toTopOf="parent">
 
             <TextView
+                android:id="@+id/sendRateMbpsText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
+                tools:text="Bitrate: 5.5Mbps" />
+
+            <TextView
                 android:id="@+id/temperatureText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -47,7 +55,7 @@
                 android:textSize="12sp"
                 tools:text="Temperature: 35.5°C" />
 
-<!--            <TextView-->
+            <!--            <TextView-->
 <!--                android:id="@+id/cpuText"-->
 <!--                android:layout_width="wrap_content"-->
 <!--                android:layout_height="wrap_content"-->
