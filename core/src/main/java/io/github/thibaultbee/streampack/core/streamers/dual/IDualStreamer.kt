@@ -216,7 +216,7 @@ data class DualStreamerVideoCodecConfig(
      * A value of 0 means that each frame is an I-frame.
      * On device with API < 25, this value will be rounded to an integer. So don't expect a precise value and any value < 0.5 will be considered as 0.
      */
-    val gopDurationInS: Float = 1f  // 1s between I frames
+    val gopDurationInS: Float = 2f  // 1s between I frames
 ) {
     internal fun toVideoCodecConfig(fps: Int) = VideoCodecConfig(
         mimeType = mimeType,

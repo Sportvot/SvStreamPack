@@ -89,7 +89,7 @@ open class VideoCodecConfig(
      * A value of 0 means that each frame is an I-frame.
      * On device with API < 25, this value will be rounded to an integer. So don't expect a precise value and any value < 0.5 will be considered as 0.
      */
-    val gopDurationInS: Float = 1f  // 1s between I frames
+    val gopDurationInS: Float = 2f  // 1s between I frames
 ) : CodecConfig(mimeType, startBitrate, profile) {
     init {
         require(mimeType.isVideo) { "MimeType must be video" }
@@ -126,7 +126,7 @@ open class VideoCodecConfig(
          * This is a best effort as few camera can not generate a fixed framerate.
          * For live streaming, I-frame interval should be really low. For recording, I-frame interval should be higher.
          */
-        gopDurationInS: Float = 1f  // 1s between I frames
+        gopDurationInS: Float = 2f  // 1s between I frames
     ) : this(
         mimeType,
         startBitrate,
