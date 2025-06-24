@@ -249,6 +249,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 try {
                     val endpoint = (streamer.endpoint as DynamicEndpoint).getSrtEndpoint() as CompositeEndpoint;
                     sendRateMbpsNew = endpoint.sink.sendRateMbps;
+                    Log.e(TAG, "send rate is " + sendRateMbpsNew)
                 }  catch (e: Throwable) {
                     Log.e(TAG, "send rate error", e)
                     // Handle the exception
