@@ -128,10 +128,13 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     binding.temperatureText.text = "Temp: %.1f°C".format(it)
                 }
             }
+        }
 
+        viewLifecycleOwner.lifecycleScope.launch {
             previewViewModel.sendRateMbps.collectLatest { sendRateMbps ->
                 sendRateMbps?.let {
-                    binding.sendRateMbpsText.text = "Bitrate: %.1fMbps".format(it)
+                    val text = String.format("Bitrate: %.1f Mbps", it)
+                    binding.sendRateMbpsText.text = text
                 }
             }
         }
