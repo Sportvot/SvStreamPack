@@ -36,6 +36,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.runBlocking
 
+const val SEND_MBPS_CAL_INTERVAL_MS: Int = 1000;
+const val SEND_MBPS_RETRIEVAL_GUARD_MS: Int = 5000;
+
 class SrtSink : AbstractSink() {
     override val supportedSinkTypes: List<MediaSinkType> = listOf(MediaSinkType.SRT)
 
@@ -43,8 +46,11 @@ class SrtSink : AbstractSink() {
     private var completionException: Throwable? = null
     private var isOnError: Boolean = false
     private var connectionStartTime: Long = 0
-    private var lastBandwidthLogTime: Long = 0
-    private var lastBandwidth: Double = 0.0
+
+
+    private var lastSendMbpsCalcTime: Long = 0
+    private var lastByteSentTotal: Long = 0
+    private var internalSendRateMbps: Double = 0.0;
 
     private var bitrate = 0L
 
@@ -54,6 +60,19 @@ class SrtSink : AbstractSink() {
     override val metrics: Stats
         get() = socket?.bistats(clear = true, instantaneous = true)
             ?: throw IllegalStateException("Socket is not initialized")
+
+    override val sendRateMbps: Double
+        get() = getSendRateWithTimeCheck()
+
+    private fun getSendRateWithTimeCheck(): Double {
+        val currentTime = System.currentTimeMillis()
+
+        if (currentTime - lastSendMbpsCalcTime <= SEND_MBPS_RETRIEVAL_GUARD_MS) {
+            return internalSendRateMbps;
+        }
+
+        return 0.0;
+    }
 
     private val _isOpenFlow = MutableStateFlow(false)
     override val isOpenFlow = _isOpenFlow.asStateFlow()
@@ -85,7 +104,7 @@ class SrtSink : AbstractSink() {
             completionException = null
             isOnError = false
             connectionStartTime = System.currentTimeMillis()
-            lastBandwidthLogTime = connectionStartTime
+            lastSendMbpsCalcTime = connectionStartTime
             it.socketContext.invokeOnCompletion { t ->
                 val connectionDuration = System.currentTimeMillis() - connectionStartTime
                 completionException = t
@@ -99,7 +118,6 @@ class SrtSink : AbstractSink() {
                 Logger.i(TAG, "SRT connection established successfully")
                 // Log initial connection stats
                 val stats = it.bistats(clear = true, instantaneous = true)
-                lastBandwidth = stats.mbpsBandwidth
                 Logger.i(TAG, "Initial SRT stats - RTT: ${stats.msRTT}ms, Bandwidth: ${stats.mbpsBandwidth} mb/s")
             } catch (t: Throwable) {
                 Logger.e(TAG, "Failed to establish SRT connection: ${t.message}", t)
@@ -155,50 +173,60 @@ class SrtSink : AbstractSink() {
         val socket = requireNotNull(socket) { "SrtEndpoint is not initialized" }
 
         try {
-            // Log connection stats periodically
+
             val stats = socket.bistats(clear = true, instantaneous = true)
             val currentTime = System.currentTimeMillis()
-            
-            // Log if RTT is high
-            if (stats.msRTT > 1000) {
-                Logger.w(TAG, "High RTT detected: ${stats.msRTT}ms, Bandwidth: ${stats.mbpsBandwidth} mb/s")
-            }
-            
-            // Log significant bandwidth changes
-            if (Math.abs(stats.mbpsBandwidth - lastBandwidth) > 0.5) { // Log if bandwidth changes by more than 0.5 mb/s
-                Logger.w(TAG, "Significant bandwidth change detected: ${lastBandwidth} -> ${stats.mbpsBandwidth} mb/s")
-                lastBandwidth = stats.mbpsBandwidth
-            }
-            
-            // Log connection duration every 30 seconds
-            if (currentTime - lastBandwidthLogTime > 30000) {
-                val connectionDuration = currentTime - connectionStartTime
-                Logger.i(TAG, "Connection duration: ${connectionDuration}ms, Current stats - RTT: ${stats.msRTT}ms, Bandwidth: ${stats.mbpsBandwidth} mb/s")
-                lastBandwidthLogTime = currentTime
+            val byteSentTotal: Long = stats.byteSentTotal
+
+            // Log RTT if high
+//            if (stats.msRTT > 1000) {
+//                Logger.w(TAG, "High RTT detected: ${stats.msRTT}ms, Bandwidth: ${stats.mbpsBandwidth} mb/s")
+//            }
+
+            // Log significant bandwidth change
+//            if (Math.abs(stats.mbpsBandwidth - lastBandwidth) > 0.5) {
+//                Logger.w(TAG, "Significant bandwidth change: ${lastBandwidth} -> ${stats.mbpsBandwidth} mb/s")
+//                lastBandwidth = stats.mbpsBandwidth
+//            }
+
+            if (currentTime - lastSendMbpsCalcTime >= SEND_MBPS_CAL_INTERVAL_MS) {
+                val bytesSentDelta = byteSentTotal - lastByteSentTotal
+                val timeDeltaSeconds = (currentTime - lastSendMbpsCalcTime) / 1000.0
+
+                if (timeDeltaSeconds > 0) {
+                    val bitsPerSecond = (bytesSentDelta * 8) / timeDeltaSeconds
+                    val mbps = bitsPerSecond / 1_000_000.0
+                    internalSendRateMbps = mbps;
+
+                    Logger.i(TAG, "Calculated Bandwidth: %.2f Mbps over last %.1f seconds".format(internalSendRateMbps, timeDeltaSeconds))
+                }
+
+                lastByteSentTotal = byteSentTotal
+                lastSendMbpsCalcTime = currentTime
             }
             
             // Log packet details before sending
-            Logger.d(TAG, "Preparing to write packet - Size: ${packet.buffer.remaining()} bytes, " +
-                "Timestamp: ${packet.ts}, " +
-                "Type: ${packet.javaClass.simpleName}, " +
-                "Buffer position: ${packet.buffer.position()}, " +
-                "Buffer limit: ${packet.buffer.limit()}")
-            
+//            Logger.d(TAG, "Preparing to write packet - Size: ${packet.buffer.remaining()} bytes, " +
+//                "Timestamp: ${packet.ts}, " +
+//                "Type: ${packet.javaClass.simpleName}, " +
+//                "Buffer position: ${packet.buffer.position()}, " +
+//                "Buffer limit: ${packet.buffer.limit()}")
+//
             // Create message control
             val msgCtrl = buildMsgCtrl(packet)
             
             // Log socket state before sending
-            Logger.d(TAG, "Socket state before send - Connected: ${socket.isConnected}, " +
-                "Send buffer available: ${stats.byteAvailSndBuf}, " +
-                "Receive buffer available: ${stats.byteAvailRcvBuf}")
+//            Logger.d(TAG, "Socket state before send - Connected: ${socket.isConnected}, " +
+//                "Send buffer available: ${stats.byteAvailSndBuf}, " +
+//                "Receive buffer available: ${stats.byteAvailRcvBuf}")
             
             // Send the packet
             val bytesSent = socket.send(packet.buffer, msgCtrl)
             
             // Log send result
-            Logger.d(TAG, "Packet write result - Bytes sent: $bytesSent, " +
-                "Buffer remaining: ${packet.buffer.remaining()}, " +
-                "Buffer position: ${packet.buffer.position()}")
+//            Logger.d(TAG, "Packet write result - Bytes sent: $bytesSent, " +
+//                "Buffer remaining: ${packet.buffer.remaining()}, " +
+//                "Buffer position: ${packet.buffer.position()}")
             
             if (bytesSent <= 0) {
                 Logger.w(TAG, "Warning: No bytes sent for packet")
