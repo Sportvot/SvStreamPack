@@ -21,6 +21,7 @@ import android.media.MediaFormat
 import android.os.Bundle
 import android.text.InputFilter
 import android.text.InputType
+import android.util.Size
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
@@ -195,9 +196,17 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
     private fun loadVideoSettings(encoder: String) {
         // Inflates video resolutions
-        streamerInfo.video.getSupportedResolutions(
-            requireContext(), encoder
-        ).map { it.toString() }.toTypedArray().run {
+
+        val encoderSupportedResolution =  streamerInfo.video.getSupportedResolutions(requireContext(), encoder)
+
+        listOf(
+            Size(1920, 1080),
+            Size(1280, 720),
+            Size(1024, 576),
+            Size(640, 360)
+        ).filter {
+            encoderSupportedResolution.contains(Size(it.width, it.height))
+        }.map { it.toString() }.toTypedArray().run {
             videoResolutionListPreference.entries = this
             videoResolutionListPreference.entryValues = this
         }
