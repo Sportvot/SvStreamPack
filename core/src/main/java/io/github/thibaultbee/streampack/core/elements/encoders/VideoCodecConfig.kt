@@ -63,7 +63,7 @@ open class VideoCodecConfig(
     /**
      * Video output resolution in pixel.
      */
-    val resolution: Size = Size(1280, 720),
+    val resolution: Size = Size(1920, 1080),
     /**
      * Video framerate.
      * This is a best effort as few camera can not generate a fixed framerate.
@@ -244,7 +244,7 @@ open class VideoCodecConfig(
     }
 
     companion object {
-        internal val DEFAULT_RESOLUTION = Size(1280, 720)
+        internal val DEFAULT_RESOLUTION = Size(1920, 1080)
         internal const val DEFAULT_FPS = 30
 
         /**

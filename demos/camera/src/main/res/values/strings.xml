@@ -42,7 +42,7 @@
 
     <string name="video_resolution">Resolution</string>
     <string name="video_resolution_key">video_resolution_key</string>
-    <string name="default_video_resolution">1280x720</string>
+    <string name="default_video_resolution">1920x1080</string>
 
     <string name="video_fps">Frames per second</string>
     <string name="video_fps_key">video_fps_key</string>
