@@ -498,27 +498,27 @@ class SettingsFragment : PreferenceFragmentCompat() {
         loadEndpoint()
 
         // Hide specific preferences after initialization
-        videoBitrateSeekBar.isVisible = false
-        audioSettingsCategory.isVisible = false
-
-        videoProfileListPreference.isVisible = false
-        videoLevelListPreference.isVisible = false
-        audioSettingsCategory.isVisible = false
-        audioEncoderListPreference.isVisible = false
-
-        audioEnablePreference.isVisible = false
-        audioChannelConfigListPreference.isVisible = false
-        audioBitrateListPreference.isVisible = false
-        audioSampleRateListPreference.isVisible = false
-        audioByteFormatListPreference.isVisible = false
-        audioProfileListPreference.isVisible = false
-        endpointTypePreference.isVisible = false
-        rtmpEndpointPreference.isVisible = false
-
-        fileEndpointPreference.isVisible = false
-        serverEnableBitrateRegulationPreference.isVisible = false
-        serverTargetVideoBitratePreference.isVisible = false
-        serverMinVideoBitratePreference.isVisible = false
-        fileNamePreference.isVisible = false
+//        videoBitrateSeekBar.isVisible = false
+//        audioSettingsCategory.isVisible = false
+//
+//        videoProfileListPreference.isVisible = false
+//        videoLevelListPreference.isVisible = false
+//        audioSettingsCategory.isVisible = false
+//        audioEncoderListPreference.isVisible = false
+//
+//        audioEnablePreference.isVisible = false
+//        audioChannelConfigListPreference.isVisible = false
+//        audioBitrateListPreference.isVisible = false
+//        audioSampleRateListPreference.isVisible = false
+//        audioByteFormatListPreference.isVisible = false
+//        audioProfileListPreference.isVisible = false
+//        endpointTypePreference.isVisible = false
+//        rtmpEndpointPreference.isVisible = false
+//
+//        fileEndpointPreference.isVisible = false
+//        serverEnableBitrateRegulationPreference.isVisible = false
+//        serverTargetVideoBitratePreference.isVisible = false
+//        serverMinVideoBitratePreference.isVisible = false
+//        fileNamePreference.isVisible = false
     }
 }
