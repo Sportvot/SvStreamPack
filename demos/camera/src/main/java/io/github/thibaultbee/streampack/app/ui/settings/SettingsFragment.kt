@@ -498,7 +498,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
         loadEndpoint()
 
         // Hide specific preferences after initialization
-        videoBitrateSeekBar.isVisible = false
+        videoBitrateSeekBar.isVisible = true
         audioSettingsCategory.isVisible = false
 
         videoProfileListPreference.isVisible = false
