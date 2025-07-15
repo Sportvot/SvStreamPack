@@ -45,61 +45,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // Parse deep link parameters
-        intent?.data?.let { uri ->
-            val query = uri.query
-            val params = mutableMapOf<String, MutableList<String>>()
-
-            query?.split("&")?.forEach { param ->
-                val parts = param.split("=", limit = 2)
-                val key = android.net.Uri.decode(parts[0])
-                val value = if (parts.size > 1) android.net.Uri.decode(parts[1]) else ""
-                params.getOrPut(key) { mutableListOf() }.add(value)
-            }
-
-            val resolution = params["enc[vid][res]"]?.firstOrNull()
-            val fps = params["enc[vid][fps]"]?.firstOrNull()
-            val srtstreamid = params["conn[][srtstreamid]"]?.firstOrNull()
-            val bitrate = params["enc[vid][bitrate]"]?.firstOrNull()?.toIntOrNull()
-
-            val connUrl = params["conn[][url]"]?.firstOrNull()
-            var ip: String? = null
-            var port: String? = null
-            connUrl?.let { url ->
-                // Example: srt://192.168.1.1:1234?mode=caller
-                val regex = Regex("""srt://([\w.]+):(\d+)""")
-                val match = regex.find(url)
-                if (match != null && match.groupValues.size >= 3) {
-                    ip = match.groupValues[1]
-                    port = match.groupValues[2]
-                }
-            }
-
-            val message = """
-                Resolution: ${resolution ?: "-"}
-                FPS: ${fps ?: "-"}
-                IP: ${ip ?: "-"}
-                Port: ${port ?: "-"}
-                SRT Stream ID: ${srtstreamid ?: "-"}
-                Bitrate: ${bitrate?.toString() ?: "-"}
-            """.trimIndent()
-            AlertDialog.Builder(this)
-                .setTitle("Streaming Parameters")
-                .setMessage(message)
-                .setPositiveButton("OK", null)
-                .show()
-
-            // Save to DataStore
-            CoroutineScope(Dispatchers.IO).launch {
-                applicationContext.dataStore.edit { prefs ->
-                    resolution?.let { prefs[stringPreferencesKey("video_resolution_key")] = it }
-                    fps?.let { prefs[stringPreferencesKey("video_fps_key")] = it }
-                    ip?.let { prefs[stringPreferencesKey("srt_server_ip_key")] = it }
-                    port?.let { prefs[stringPreferencesKey("srt_server_port_key")] = it }
-                    srtstreamid?.let { prefs[stringPreferencesKey("server_stream_id_key")] = it }
-                    bitrate?.let { prefs[intPreferencesKey("live_video_bitrate_key")] = it }
-                }
-            }
-        }
+        handleDeepLink(intent)
 
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
@@ -114,61 +60,7 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         // Parse deep link parameters
-        intent.data?.let { uri ->
-            val query = uri.query
-            val params = mutableMapOf<String, MutableList<String>>()
-
-            query?.split("&")?.forEach { param ->
-                val parts = param.split("=", limit = 2)
-                val key = android.net.Uri.decode(parts[0])
-                val value = if (parts.size > 1) android.net.Uri.decode(parts[1]) else ""
-                params.getOrPut(key) { mutableListOf() }.add(value)
-            }
-
-            val resolution = params["enc[vid][res]"]?.firstOrNull()
-            val fps = params["enc[vid][fps]"]?.firstOrNull()
-            val srtstreamid = params["conn[][srtstreamid]"]?.firstOrNull()
-            val bitrate = params["enc[vid][bitrate]"]?.firstOrNull()?.toIntOrNull()
-           
-            val connUrl = params["conn[][url]"]?.firstOrNull()
-            var ip: String? = null
-            var port: String? = null
-            connUrl?.let { url ->
-                // Example: srt://192.168.1.1:1234?mode=caller
-                val regex = Regex("""srt://([\w.]+):(\d+)""")
-                val match = regex.find(url)
-                if (match != null && match.groupValues.size >= 3) {
-                    ip = match.groupValues[1]
-                    port = match.groupValues[2]
-                }
-            }
-
-            val message = """
-                Resolution: ${resolution ?: "-"}
-                FPS: ${fps ?: "-"}
-                IP: ${ip ?: "-"}
-                Port: ${port ?: "-"}
-                SRT Stream ID: ${srtstreamid ?: "-"}
-                Bitrate: ${bitrate?.toString() ?: "-"}
-            """.trimIndent()
-            AlertDialog.Builder(this)
-                .setTitle("Streaming Parameters")
-                .setMessage(message)
-                .setPositiveButton("OK", null)
-                .show()
-
-            // Save to DataStore
-            CoroutineScope(Dispatchers.IO).launch {
-                applicationContext.dataStore.edit { prefs ->
-                    resolution?.let { prefs[stringPreferencesKey("video_resolution_key")] = it }
-                    fps?.let { prefs[stringPreferencesKey("video_fps_key")] = it }
-                    ip?.let { prefs[stringPreferencesKey("srt_server_ip_key")] = it }
-                    port?.let { prefs[stringPreferencesKey("srt_server_port_key")] = it }
-                    srtstreamid?.let { prefs[stringPreferencesKey("server_stream_id_key")] = it }
-                    bitrate?.let { prefs[intPreferencesKey("live_video_bitrate_key")] = it }
-                }
-            }
-        }
+        handleDeepLink(intent)
     }
 
     private fun bindProperties() {
@@ -217,6 +109,62 @@ class MainActivity : AppCompatActivity() {
         isStreaming = streaming
         // Update menu items when streaming state changes
         invalidateOptionsMenu()
+    }
+
+    private fun handleDeepLink(intent: Intent?) {
+        intent?.data?.let { uri ->
+            val query = uri.query
+            val params = mutableMapOf<String, MutableList<String>>()
+
+            query?.split("&")?.forEach { param ->
+                val parts = param.split("=", limit = 2)
+                val key = android.net.Uri.decode(parts[0])
+                val value = if (parts.size > 1) android.net.Uri.decode(parts[1]) else ""
+                params.getOrPut(key) { mutableListOf() }.add(value)
+            }
+
+            val resolution = params["enc[vid][res]"]?.firstOrNull()
+            val fps = params["enc[vid][fps]"]?.firstOrNull()
+            val srtstreamid = params["conn[][srtstreamid]"]?.firstOrNull()
+            val bitrate = params["enc[vid][bitrate]"]?.firstOrNull()?.toIntOrNull()
+            val connUrl = params["conn[][url]"]?.firstOrNull()
+            var ip: String? = null
+            var port: String? = null
+            connUrl?.let { url ->
+                val regex = Regex("""srt://([\w.]+):(\d+)""")
+                val match = regex.find(url)
+                if (match != null && match.groupValues.size >= 3) {
+                    ip = match.groupValues[1]
+                    port = match.groupValues[2]
+                }
+            }
+
+            val message = """
+                Resolution: ${resolution ?: "-"}
+                FPS: ${fps ?: "-"}
+                IP: ${ip ?: "-"}
+                Port: ${port ?: "-"}
+                SRT Stream ID: ${srtstreamid ?: "-"}
+                Bitrate: ${bitrate?.toString() ?: "-"}
+            """.trimIndent()
+            AlertDialog.Builder(this)
+                .setTitle("Streaming Parameters")
+                .setMessage(message)
+                .setPositiveButton("OK", null)
+                .show()
+
+            // Save to DataStore
+            CoroutineScope(Dispatchers.IO).launch {
+                applicationContext.dataStore.edit { prefs ->
+                    resolution?.let { prefs[stringPreferencesKey("video_resolution_key")] = it }
+                    fps?.let { prefs[stringPreferencesKey("video_fps_key")] = it }
+                    ip?.let { prefs[stringPreferencesKey("srt_server_ip_key")] = it }
+                    port?.let { prefs[stringPreferencesKey("srt_server_port_key")] = it }
+                    srtstreamid?.let { prefs[stringPreferencesKey("server_stream_id_key")] = it }
+                    bitrate?.let { prefs[intPreferencesKey("live_video_bitrate_key")] = it }
+                }
+            }
+        }
     }
 
     companion object {
