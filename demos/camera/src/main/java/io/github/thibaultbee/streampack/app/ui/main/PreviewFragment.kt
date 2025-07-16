@@ -41,6 +41,8 @@ import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.ui.views.PreviewView
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import android.webkit.WebViewClient
+import android.graphics.Color
 
 class PreviewFragment : Fragment(R.layout.main_fragment) {
     private lateinit var binding: MainFragmentBinding
@@ -58,6 +60,32 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
         bindProperties()
         return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        binding.toggleOverlayButton.setOnClickListener {
+            if (binding.overlayWebView.visibility == View.VISIBLE) {
+                binding.overlayWebView.visibility = View.GONE
+                binding.overlayWebView.loadUrl("about:blank")
+            } else {
+                binding.overlayWebView.visibility = View.VISIBLE
+                binding.overlayWebView.setBackgroundColor(Color.TRANSPARENT)
+                binding.overlayWebView.webViewClient = WebViewClient()
+                binding.overlayWebView.settings.apply {
+                    javaScriptEnabled = true
+                    domStorageEnabled = true
+                    useWideViewPort = true
+                    loadWithOverviewMode = true
+                    setSupportZoom(true)
+                    builtInZoomControls = true
+                    displayZoomControls = false
+                    mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                }
+                android.webkit.WebView.setWebContentsDebuggingEnabled(true)
+                binding.overlayWebView.loadUrl("https://template-engine.sportvot.com/preview/67b3175024aa9a0001282af7")
+            }
+        }
     }
 
     @SuppressLint("MissingPermission")
