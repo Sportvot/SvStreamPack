@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import android.webkit.WebViewClient
 import android.graphics.Color
+import io.github.thibaultbee.streampack.app.studio.StudioConstants
 
 class PreviewFragment : Fragment(R.layout.main_fragment) {
     private lateinit var binding: MainFragmentBinding
@@ -64,6 +65,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val matchId = arguments?.getString("MATCH_ID")
         binding.toggleOverlayButton.setOnClickListener {
             if (binding.overlayWebView.visibility == View.VISIBLE) {
                 binding.overlayWebView.visibility = View.GONE
@@ -83,7 +85,10 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 }
                 android.webkit.WebView.setWebContentsDebuggingEnabled(true)
-                binding.overlayWebView.loadUrl("https://template-engine.sportvot.com/preview/67b3175024aa9a0001282af7")
+                val url = "${StudioConstants.SCORING_OVERLAY_URL}/$matchId"
+
+                Log.i("SCORING_URL", url)
+                binding.overlayWebView.loadUrl(url)
             }
         }
     }

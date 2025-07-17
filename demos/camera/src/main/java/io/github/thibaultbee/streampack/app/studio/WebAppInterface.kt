@@ -10,8 +10,17 @@ class WebAppInterface(private val context: StudioActivity) {
         try {
             val json = JSONObject(message)
             val type = json.optString("type")
-            val data = json.opt("data")
-            Log.d("WebAppInterface", "Received message: type=$type, data=$data")
+            val data = json.optJSONObject("data")
+
+            if(type == "START_STREAM" && data != null) {
+                Log.d("WebAppInterface", "Received message: type=$type, data=$data")
+
+                val matchId = data.optString("matchId")
+                val intent = android.content.Intent(context, io.github.thibaultbee.streampack.app.ui.main.MainActivity::class.java)
+                intent.putExtra("MATCH_ID", matchId)
+
+                context.startActivity(intent)
+            }
         } catch (e: Exception) {
             Log.e("WebAppInterface", "Invalid message: $message", e)
         }

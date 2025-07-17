@@ -48,8 +48,16 @@ class MainActivity : AppCompatActivity() {
         handleDeepLink(intent)
 
         if (savedInstanceState == null) {
+            // Pass MATCH_ID from intent extras to PreviewFragment if present
+            val matchId = intent.getStringExtra("MATCH_ID")
+            val fragment = PreviewFragment()
+            if (matchId != null) {
+                val args = Bundle()
+                args.putString("MATCH_ID", matchId)
+                fragment.arguments = args
+            }
             supportFragmentManager.beginTransaction()
-                .replace(R.id.container, PreviewFragment())
+                .replace(R.id.container, fragment)
                 .commitNow()
         }
 
