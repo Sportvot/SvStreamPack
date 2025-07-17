@@ -1,11 +1,10 @@
 package io.github.thibaultbee.streampack.app.studio
 
-import android.content.Context
 import android.util.Log
 import android.webkit.JavascriptInterface
 import org.json.JSONObject
 
-class WebAppInterface(private val context: Context) {
+class WebAppInterface(private val context: StudioActivity) {
     @JavascriptInterface
     fun postMessage(message: String) {
         try {
