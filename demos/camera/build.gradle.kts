@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.androidx.preference.ktx)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.datastore)
+    implementation("androidx.webkit:webkit:1.10.0")
 
     testImplementation(libs.junit)
 
