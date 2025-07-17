@@ -1,7 +1,7 @@
 package io.github.thibaultbee.streampack.app.studio
 
 object StudioConstants {
-    private const val IS_TEST = false
+    private const val IS_TEST = true
 
     private const val MAIN_WEBVIEW_URL_TEST = "https://studio-test.sportvot.com"
     private const val MAIN_WEBVIEW_URL_PROD = "https://studio.sportvot.com"
@@ -19,4 +19,6 @@ object StudioConstants {
     private const val PROD_URL = "https://interapis.sportvot.com"
     val BASE_URL: String
         get() = if (IS_TEST) TEST_URL else PROD_URL
+
+    val SCORING_OVERLAY_URL = "$MAIN_WEBVIEW_URL/scoring-overlay-app"
 }

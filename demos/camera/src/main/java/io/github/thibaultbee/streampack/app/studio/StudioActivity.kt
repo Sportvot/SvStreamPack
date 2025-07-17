@@ -25,6 +25,9 @@ class StudioActivity : AppCompatActivity() {
 
         webView = findViewById(R.id.studio_web_view)
 
+        // Register JavaScript interface for postMessage
+        webView.addJavascriptInterface(WebAppInterface(this), "Android")
+
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
                 view: WebView?,
