@@ -66,6 +66,32 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val matchId = arguments?.getString("MATCH_ID")
+        binding.toggleScoringButton.setOnClickListener {
+            if (binding.scoringWebView.visibility == View.VISIBLE) {
+                binding.scoringWebView.visibility = View.GONE
+                binding.scoringWebView.loadUrl("about:blank")
+            } else {
+                binding.scoringWebView.visibility = View.VISIBLE
+                binding.scoringWebView.setBackgroundColor(Color.TRANSPARENT)
+                binding.scoringWebView.webViewClient = WebViewClient()
+                binding.scoringWebView.settings.apply {
+                    javaScriptEnabled = true
+                    domStorageEnabled = true
+                    useWideViewPort = true
+                    loadWithOverviewMode = true
+                    setSupportZoom(true)
+                    builtInZoomControls = true
+                    displayZoomControls = false
+                    mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                }
+                android.webkit.WebView.setWebContentsDebuggingEnabled(true)
+                val url = "${StudioConstants.SCORING_OVERLAY_URL}/$matchId"
+
+                Log.i("SCORING_URL", url)
+                binding.scoringWebView.loadUrl(url)
+            }
+        }
+
         binding.toggleOverlayButton.setOnClickListener {
             if (binding.overlayWebView.visibility == View.VISIBLE) {
                 binding.overlayWebView.visibility = View.GONE
@@ -85,9 +111,9 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 }
                 android.webkit.WebView.setWebContentsDebuggingEnabled(true)
-                val url = "${StudioConstants.SCORING_OVERLAY_URL}/$matchId"
+                val url = "${StudioConstants.OVERLAY_URL}/preview/$matchId"
 
-                Log.i("SCORING_URL", url)
+                Log.i("SCORING_URL OVERLAY", url)
                 binding.overlayWebView.loadUrl(url)
             }
         }

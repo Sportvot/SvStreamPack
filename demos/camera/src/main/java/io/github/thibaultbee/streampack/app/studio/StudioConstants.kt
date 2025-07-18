@@ -21,4 +21,9 @@ object StudioConstants {
         get() = if (IS_TEST) TEST_URL else PROD_URL
 
     val SCORING_OVERLAY_URL = "$MAIN_WEBVIEW_URL/scoring-overlay-app"
+
+    private const val TEST_OVERLAY = "https://template-engine-test.sportvot.com"
+    private const val PROD_OVERLAY = "https://template-engine.sportvot.com"
+    val OVERLAY_URL: String
+        get() = if (IS_TEST) TEST_OVERLAY else PROD_OVERLAY
 }

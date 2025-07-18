@@ -35,6 +35,13 @@
             android:visibility="gone"
             android:background="@android:color/transparent" />
 
+        <WebView
+            android:id="@+id/scoringWebView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone"
+            android:background="@android:color/transparent" />
+
         <LinearLayout
             android:id="@+id/performanceMetricsPanel"
             android:layout_width="wrap_content"
@@ -178,6 +185,15 @@
                 android:layout_height="wrap_content"
                 android:contentDescription="@string/toggle_overlay"
                 android:src="@drawable/ic_overlay_24"
+                android:alpha="0.6"
+                app:tint="@android:color/white" />
+
+            <ImageButton
+                android:id="@+id/toggleScoringButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/toggle_scoring"
+                android:src="@drawable/ic_scoring_25"
                 android:alpha="0.6"
                 app:tint="@android:color/white" />
 
