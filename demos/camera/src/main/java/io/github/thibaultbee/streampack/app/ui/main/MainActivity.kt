@@ -45,15 +45,16 @@ class MainActivity : AppCompatActivity() {
         binding = MainActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Parse deep link parameters using DeepLinkParams
-        val deepLinkParams = DeepLinkParams.fromUri(intent?.data)
+        // Parse deep link parameters
+        handleDeepLink(intent)
 
         if (savedInstanceState == null) {
-            // Pass MATCH_ID from parsed params to PreviewFragment if present
+            val matchId = intent.getStringExtra("MATCH_ID")
+
             val fragment = PreviewFragment()
-            if (deepLinkParams.matchId != null) {
+            if (matchId != null) {
                 val args = Bundle()
-                args.putString("MATCH_ID", deepLinkParams.matchId)
+                args.putString("MATCH_ID", matchId)
                 fragment.arguments = args
             }
             supportFragmentManager.beginTransaction()

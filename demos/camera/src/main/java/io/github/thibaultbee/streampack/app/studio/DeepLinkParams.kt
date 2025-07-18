@@ -1,6 +1,7 @@
 package io.github.thibaultbee.streampack.app.studio
 
 import android.net.Uri
+import android.util.Log
 
 /**
  * Data class representing parsed deep link parameters for streaming.
@@ -27,7 +28,7 @@ data class DeepLinkParams(
                 params.getOrPut(key) { mutableListOf() }.add(value)
             }
 
-            val matchId = params["matchId"]?.firstOrNull()
+            val matchId = params["streamId"]?.firstOrNull()
             val resolution = params["enc[vid][res]"]?.firstOrNull()
             val fps = params["enc[vid][fps]"]?.firstOrNull()
             val srtStreamId = params["conn[][srtstreamid]"]?.firstOrNull()
