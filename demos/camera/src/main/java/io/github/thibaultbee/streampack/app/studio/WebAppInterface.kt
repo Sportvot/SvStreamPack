@@ -5,6 +5,13 @@ import android.webkit.JavascriptInterface
 import org.json.JSONObject
 import io.github.thibaultbee.streampack.app.studio.DeepLinkParams
 import androidx.core.net.toUri
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import io.github.thibaultbee.streampack.app.utils.dataStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class WebAppInterface(private val context: StudioActivity) {
     @JavascriptInterface
@@ -18,14 +25,23 @@ class WebAppInterface(private val context: StudioActivity) {
 
                 // If data contains a URL (connectionString), use DeepLinkParams to parse matchId, else fallback to direct extraction
                 val url = data.optString("connectionString", null.toString())
-                val matchId = run {
-                    val uri = url.toUri()
-                    DeepLinkParams.fromUri(uri).matchId
-                }
+                val uri = url.toUri()
+                val params = DeepLinkParams.fromUri(uri)
+                val matchId = params.matchId
 
                 val intent = android.content.Intent(context, io.github.thibaultbee.streampack.app.ui.main.MainActivity::class.java)
                 if (matchId != null) {
                     intent.putExtra("MATCH_ID", matchId)
+                    CoroutineScope(Dispatchers.IO).launch {
+                        context.applicationContext.dataStore.edit { prefs ->
+                            params.resolution?.let { prefs[stringPreferencesKey("video_resolution_key")] = it }
+                            params.fps?.let { prefs[stringPreferencesKey("video_fps_key")] = it }
+                            params.ip?.let { prefs[stringPreferencesKey("srt_server_ip_key")] = it }
+                            params.port?.let { prefs[stringPreferencesKey("srt_server_port_key")] = it }
+                            params.srtStreamId?.let { prefs[stringPreferencesKey("server_stream_id_key")] = it }
+                            params.bitrate?.let { prefs[intPreferencesKey("live_video_bitrate_key")] = it }
+                        }
+                    }
                 }
                 context.startActivity(intent)
             }
