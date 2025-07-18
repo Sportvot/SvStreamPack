@@ -34,6 +34,7 @@ import io.github.thibaultbee.streampack.app.utils.dataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import io.github.thibaultbee.streampack.app.studio.DeepLinkParams
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: MainActivityBinding
@@ -44,16 +45,15 @@ class MainActivity : AppCompatActivity() {
         binding = MainActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Parse deep link parameters
-        handleDeepLink(intent)
+        // Parse deep link parameters using DeepLinkParams
+        val deepLinkParams = DeepLinkParams.fromUri(intent?.data)
 
         if (savedInstanceState == null) {
-            // Pass MATCH_ID from intent extras to PreviewFragment if present
-            val matchId = intent.getStringExtra("MATCH_ID")
+            // Pass MATCH_ID from parsed params to PreviewFragment if present
             val fragment = PreviewFragment()
-            if (matchId != null) {
+            if (deepLinkParams.matchId != null) {
                 val args = Bundle()
-                args.putString("MATCH_ID", matchId)
+                args.putString("MATCH_ID", deepLinkParams.matchId)
                 fragment.arguments = args
             }
             supportFragmentManager.beginTransaction()
@@ -67,8 +67,9 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // Parse deep link parameters
-        handleDeepLink(intent)
+        // Parse deep link parameters using DeepLinkParams
+        val deepLinkParams = DeepLinkParams.fromUri(intent.data)
+        // (Handle any updates needed with new params)
     }
 
     private fun bindProperties() {
