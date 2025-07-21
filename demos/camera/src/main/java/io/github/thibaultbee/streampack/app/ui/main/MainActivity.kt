@@ -52,7 +52,7 @@ class MainActivity : AppCompatActivity() {
 
         if (savedInstanceState == null) {
             val deepLinkParams = DeepLinkParams.fromUri(intent.data)
-            val matchId = deepLinkParams.matchId
+            val matchId = deepLinkParams.matchId ?: intent.getStringExtra("MATCH_ID")
             val refreshId = deepLinkParams.refreshId
             val refreshToken = deepLinkParams.refreshToken
 

@@ -88,7 +88,15 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 }
                 android.webkit.WebView.setWebContentsDebuggingEnabled(true)
-                val url = "${StudioConstants.SCORING_OVERLAY_URL}/$matchId?refreshId=$refreshId&refreshToken=$refreshToken"
+
+                val query = listOfNotNull(
+                    refreshId?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
+                        ?.let { "refreshId=$it" },
+                    refreshToken?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
+                        ?.let { "refreshToken=$it" }
+                ).joinToString("&")
+                val url =
+                    "${StudioConstants.SCORING_OVERLAY_URL}/$matchId" + if (query.isNotEmpty()) "?$query" else ""
 
                 Log.i("SCORING_URL", url)
                 binding.scoringWebView.loadUrl(url)
