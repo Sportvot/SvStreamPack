@@ -36,6 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import io.github.thibaultbee.streampack.app.studio.DeepLinkParams
 import io.github.thibaultbee.streampack.app.studio.StudioConstants
+import androidx.lifecycle.lifecycleScope
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: MainActivityBinding
@@ -140,20 +141,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleDeepLink(intent: Intent?) {
-        val deepLinkParams = DeepLinkParams.fromUri(intent?.data)
-        val message = """
-                Resolution: ${deepLinkParams.resolution ?: "-"}
-                FPS: ${deepLinkParams.fps ?: "-"}
-                IP: ${deepLinkParams.ip ?: "-"}
-                Port: ${deepLinkParams.port ?: "-"}
-                SRT Stream ID: ${deepLinkParams.srtStreamId ?: "-"}
-                Bitrate: ${deepLinkParams.bitrate?.toString() ?: "-"}
-           """.trimIndent()
-        AlertDialog.Builder(this)
-            .setTitle("Streaming Parameters")
-            .setMessage(message)
-            .setPositiveButton("OK", null)
-            .show()
+        val params = DeepLinkParams.fromUri(intent?.data)
+        lifecycleScope.launch(Dispatchers.IO) {
+            applicationContext.dataStore.edit { prefs ->
+                params.resolution?.let { prefs[stringPreferencesKey("video_resolution_key")] = it }
+                params.fps?.let { prefs[stringPreferencesKey("video_fps_key")] = it }
+                params.ip?.let { prefs[stringPreferencesKey("srt_server_ip_key")] = it }
+                params.port?.let { prefs[stringPreferencesKey("srt_server_port_key")] = it }
+                params.srtStreamId?.let { prefs[stringPreferencesKey("server_stream_id_key")] = it }
+                params.bitrate?.let { prefs[intPreferencesKey("live_video_bitrate_key")] = it }
+            }
+        }
     }
 
     companion object {
