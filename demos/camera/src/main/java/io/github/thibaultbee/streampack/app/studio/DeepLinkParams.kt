@@ -13,7 +13,9 @@ data class DeepLinkParams(
     val srtStreamId: String? = null,
     val bitrate: Int? = null,
     val ip: String? = null,
-    val port: String? = null
+    val port: String? = null,
+    val refreshId: String? = null,
+    val refreshToken: String? = null
 ) {
     companion object {
         fun fromUri(uri: Uri?): DeepLinkParams {
@@ -29,6 +31,8 @@ data class DeepLinkParams(
             }
 
             val matchId = params["streamId"]?.firstOrNull()
+            val refreshId = params["refreshId"]?.firstOrNull()
+            val refreshToken = params["refreshToken"]?.firstOrNull()
             val resolution = params["enc[vid][res]"]?.firstOrNull()
             val fps = params["enc[vid][fps]"]?.firstOrNull()
             val srtStreamId = params["conn[][srtstreamid]"]?.firstOrNull()
@@ -52,7 +56,9 @@ data class DeepLinkParams(
                 srtStreamId = srtStreamId,
                 bitrate = bitrate,
                 ip = ip,
-                port = port
+                port = port,
+                refreshId = refreshId,
+                refreshToken = refreshToken
             )
         }
     }

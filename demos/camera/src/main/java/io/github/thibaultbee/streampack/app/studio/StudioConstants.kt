@@ -26,4 +26,8 @@ object StudioConstants {
     private const val PROD_OVERLAY = "https://template-engine.sportvot.com"
     val OVERLAY_URL: String
         get() = if (IS_TEST) TEST_OVERLAY else PROD_OVERLAY
+
+    val REFRESH_ID_KEY = "REFRESH_ID"
+    val REFRESH_TOKEN_KEY = "REFRESH_TOKEN"
+    val MATCH_ID_KEY = "MATCH_ID"
 }

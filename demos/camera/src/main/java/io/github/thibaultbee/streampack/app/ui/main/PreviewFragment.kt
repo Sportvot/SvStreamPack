@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import android.webkit.WebViewClient
 import android.graphics.Color
+import androidx.appcompat.app.AlertDialog
 import io.github.thibaultbee.streampack.app.studio.StudioConstants
 
 class PreviewFragment : Fragment(R.layout.main_fragment) {
@@ -65,7 +66,9 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val matchId = arguments?.getString("MATCH_ID")
+        val matchId = arguments?.getString(StudioConstants.MATCH_ID_KEY)
+        val refreshId = arguments?.getString(StudioConstants.REFRESH_ID_KEY)
+        val refreshToken = arguments?.getString(StudioConstants.REFRESH_TOKEN_KEY)
         binding.toggleScoringButton.setOnClickListener {
             if (binding.scoringWebView.visibility == View.VISIBLE) {
                 binding.scoringWebView.visibility = View.GONE
@@ -85,7 +88,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 }
                 android.webkit.WebView.setWebContentsDebuggingEnabled(true)
-                val url = "${StudioConstants.SCORING_OVERLAY_URL}/$matchId"
+                val url = "${StudioConstants.SCORING_OVERLAY_URL}/$matchId?refreshId=$refreshId&refreshToken=$refreshToken"
 
                 Log.i("SCORING_URL", url)
                 binding.scoringWebView.loadUrl(url)

@@ -28,10 +28,14 @@ class WebAppInterface(private val context: StudioActivity) {
                 val uri = url.toUri()
                 val params = DeepLinkParams.fromUri(uri)
                 val matchId = params.matchId
+                val refreshId = params.refreshId
+                val refreshToken = params.refreshToken
 
                 val intent = android.content.Intent(context, io.github.thibaultbee.streampack.app.ui.main.MainActivity::class.java)
                 if (matchId != null) {
-                    intent.putExtra("MATCH_ID", matchId)
+                    intent.putExtra(StudioConstants.MATCH_ID_KEY, matchId)
+                    intent.putExtra(StudioConstants.REFRESH_ID_KEY, refreshId)
+                    intent.putExtra(StudioConstants.REFRESH_TOKEN_KEY, refreshToken)
                     CoroutineScope(Dispatchers.IO).launch {
                         context.applicationContext.dataStore.edit { prefs ->
                             params.resolution?.let { prefs[stringPreferencesKey("video_resolution_key")] = it }
