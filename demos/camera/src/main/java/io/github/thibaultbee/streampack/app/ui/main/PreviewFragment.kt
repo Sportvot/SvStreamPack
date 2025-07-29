@@ -52,6 +52,8 @@ import android.content.Context
 
 class PreviewFragment : Fragment(R.layout.main_fragment) {
     private lateinit var binding: MainFragmentBinding
+    private var isOverlayVisible = false
+    private var isScoringVisible = false
 
     private val previewViewModel: PreviewViewModel by viewModels {
         PreviewViewModelFactory(requireActivity().application)
@@ -77,6 +79,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             if (binding.scoringWebView.visibility == View.VISIBLE) {
                 binding.scoringWebView.visibility = View.GONE
                 binding.scoringWebView.loadUrl("about:blank")
+                isScoringVisible = false
             } else {
                 binding.scoringWebView.visibility = View.VISIBLE
                 binding.scoringWebView.setBackgroundColor(Color.TRANSPARENT)
@@ -104,13 +107,16 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
                 Log.i("SCORING_URL", url)
                 binding.scoringWebView.loadUrl(url)
+                isScoringVisible = true
             }
+            updateScoringButtonHighlight()
         }
 
         binding.toggleOverlayButton.setOnClickListener {
             if (binding.overlayWebView.visibility == View.VISIBLE) {
                 binding.overlayWebView.visibility = View.GONE
                 binding.overlayWebView.loadUrl("about:blank")
+                isOverlayVisible = false
             } else {
                 binding.overlayWebView.visibility = View.VISIBLE
                 binding.overlayWebView.setBackgroundColor(Color.TRANSPARENT)
@@ -130,7 +136,9 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
                 Log.i("SCORING_URL OVERLAY", url)
                 binding.overlayWebView.loadUrl(url)
+                isOverlayVisible = true
             }
+            updateOverlayButtonHighlight()
         }
 
         binding.showCopyScoringUrlButton?.setOnClickListener {
@@ -147,6 +155,9 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             val ottUrl = "${StudioConstants.OTT_URL}/stream/$matchId"
             showCopyLinkDialog(ottUrl, url)
         }
+        // Ensure button highlight is correct on view creation
+        updateOverlayButtonHighlight()
+        updateScoringButtonHighlight()
     }
 
     @SuppressLint("MissingPermission")
@@ -437,6 +448,26 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         }
 
         dialog.show()
+    }
+
+    private fun updateOverlayButtonHighlight() {
+        if (isOverlayVisible) {
+            binding.toggleOverlayButton.setBackgroundResource(R.drawable.button_highlight_background)
+            binding.toggleOverlayButton.alpha = 1.0f
+        } else {
+            binding.toggleOverlayButton.setBackgroundResource(0)
+            binding.toggleOverlayButton.alpha = 0.6f
+        }
+    }
+
+    private fun updateScoringButtonHighlight() {
+        if (isScoringVisible) {
+            binding.toggleScoringButton.setBackgroundResource(R.drawable.button_highlight_background)
+            binding.toggleScoringButton.alpha = 1.0f
+        } else {
+            binding.toggleScoringButton.setBackgroundResource(0)
+            binding.toggleScoringButton.alpha = 0.6f
+        }
     }
 
     companion object {
