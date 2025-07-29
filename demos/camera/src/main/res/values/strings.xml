@@ -20,6 +20,12 @@
     <string name="mute_unmute_microphone">Mute unmute microphone</string>
     <string name="toggle_overlay">Turn on/off overlay</string>
     <string name="toggle_scoring">Turn on/off scoring</string>
+    <string name="settings_dialog">Settings Dialog</string>
+    <string name="copy_link">Copy Link</string>
+    <string name="overlay_link">Overlay Link</string>
+    <string name="scoring_link">Scoring Link</string>
+    <string name="match_viewing_link">Match Viewing Link</string>
+    <string name="copy_text">Copy</string>
 
     <!-- Settings -->
     <string name="settings">Settings</string>

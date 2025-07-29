@@ -27,6 +27,11 @@ object StudioConstants {
     val OVERLAY_URL: String
         get() = if (IS_TEST) TEST_OVERLAY else PROD_OVERLAY
 
+    private const val TEST_OTT = "https://ott-test.sportvot.com"
+    private const val PROD_OTT = "https://sportvot.com"
+    val OTT_URL: String
+        get() = if (IS_TEST) TEST_OTT else PROD_OTT
+
     val REFRESH_ID_KEY = "REFRESH_ID"
     val REFRESH_TOKEN_KEY = "REFRESH_TOKEN"
     val MATCH_ID_KEY = "MATCH_ID"

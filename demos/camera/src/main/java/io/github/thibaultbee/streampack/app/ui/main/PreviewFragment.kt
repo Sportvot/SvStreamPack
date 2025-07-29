@@ -45,6 +45,10 @@ import android.webkit.WebViewClient
 import android.graphics.Color
 import androidx.appcompat.app.AlertDialog
 import io.github.thibaultbee.streampack.app.studio.StudioConstants
+import android.widget.Toast
+import android.widget.TextView
+import android.widget.Button
+import android.content.Context
 
 class PreviewFragment : Fragment(R.layout.main_fragment) {
     private lateinit var binding: MainFragmentBinding
@@ -127,6 +131,21 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 Log.i("SCORING_URL OVERLAY", url)
                 binding.overlayWebView.loadUrl(url)
             }
+        }
+
+        binding.showCopyScoringUrlButton?.setOnClickListener {
+            val matchId = arguments?.getString(StudioConstants.MATCH_ID_KEY)
+            val refreshId = arguments?.getString(StudioConstants.REFRESH_ID_KEY)
+            val refreshToken = arguments?.getString(StudioConstants.REFRESH_TOKEN_KEY)
+            val query = listOfNotNull(
+                refreshId?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
+                    ?.let { "refreshId=$it" },
+                refreshToken?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
+                    ?.let { "refreshToken=$it" }
+            ).joinToString("&")
+            val url = "${StudioConstants.SCORING_OVERLAY_URL}/$matchId" + if (query.isNotEmpty()) "?$query" else ""
+            val ottUrl = "${StudioConstants.OTT_URL}/stream/$matchId"
+            showCopyLinkDialog(ottUrl, url)
         }
     }
 
@@ -385,6 +404,39 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         if (missingPermissions.isNotEmpty()) {
             showPermissionError(*missingPermissions.toTypedArray())
         }
+    }
+
+    private fun showCopyLinkDialog(link1: String, link2: String) {
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_settings, null)
+        val linkTextView1 = dialogView.findViewById<TextView>(R.id.linkTextView1)
+        val copyButton1 = dialogView.findViewById<Button>(R.id.copyButton1)
+        val linkTextView2 = dialogView.findViewById<TextView>(R.id.linkTextView2)
+        val copyButton2 = dialogView.findViewById<Button>(R.id.copyButton2)
+
+        linkTextView1.text = link1
+        linkTextView2.text = link2
+
+        val dialog = AlertDialog.Builder(requireContext())
+            .setTitle("Links")
+            .setView(dialogView)
+            .setNegativeButton("Close", null)
+            .create()
+
+        copyButton1.setOnClickListener {
+            val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("Match View Link", link1)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(requireContext(), "Match view link copied to clipboard", Toast.LENGTH_SHORT).show()
+        }
+
+        copyButton2.setOnClickListener {
+            val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("Scoring Link", link2)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(requireContext(), "Scoring link copied to clipboard", Toast.LENGTH_SHORT).show()
+        }
+
+        dialog.show()
     }
 
     companion object {
