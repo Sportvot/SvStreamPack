@@ -149,6 +149,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     private var lastTotalCpuTime = 0L
     private var lastAppCpuTime = 0L
+    private var reconnectAttempts = 0
+    private val maxReconnectAttempts = 3
+    private val reconnectDelayMillis = 3000L
 
     init {
         viewModelScope.launch {
@@ -179,6 +182,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             streamer.throwableFlow.filterNotNull().filter { it.isClosedException }
                 .map { "Connection lost: ${it.message}" }.collect {
                     _endpointErrorLiveData.postValue(it)
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++
+                        Log.i(TAG, "Attempting to reconnect... ($reconnectAttempts/$maxReconnectAttempts)")
+                        delay(reconnectDelayMillis)
+                        startStream()
+                    } else {
+                        Log.e(TAG, "Max reconnect attempts reached. Giving up.")
+                        reconnectAttempts = 0 
+                    }
                 }
         }
         viewModelScope.launch {
@@ -310,7 +322,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             try {
                 val descriptor = storageRepository.endpointDescriptorFlow.first()
                 streamer.startStream(descriptor)
-
+                reconnectAttempts = 0  
                 if (descriptor.type.sinkType == MediaSinkType.SRT) {
                     val bitrateRegulatorConfig =
                         storageRepository.bitrateRegulatorConfigFlow.first()
@@ -321,7 +333,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                 bitrateRegulatorConfig = bitrateRegulatorConfig
                             )
                         )
-
                     }
                 }
             } catch (e: Throwable) {
