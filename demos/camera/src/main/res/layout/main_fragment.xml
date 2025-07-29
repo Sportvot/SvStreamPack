@@ -97,6 +97,15 @@
             app:layout_constraintStart_toStartOf="parent">
 
             <ImageButton
+                android:id="@+id/showCopyScoringUrlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/settings_dialog"
+                android:src="@drawable/is_settings"
+                android:alpha="0.6"
+                app:tint="@android:color/white"  />
+
+            <ImageButton
                 android:id="@+id/switchCameraButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -258,17 +267,6 @@
                 android:alpha="0.6"
                 android:checked="@{!viewmodel.streamerLiveData.audioProcessor.muted}"
                 app:tint="@android:color/white" />
-
-            <ImageButton
-                android:id="@+id/showCopyScoringUrlButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="@string/settings_dialog"
-                android:src="@drawable/is_settings"
-                android:alpha="0.6"
-                app:tint="@android:color/white"  />
-
-
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>
