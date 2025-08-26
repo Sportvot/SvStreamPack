@@ -98,17 +98,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      */
     private val cameraSettings: CameraSettings?
         get() {
-            val videoSource = (streamer as? IWithVideoSource)?.videoSourceFlow?.value
+            val videoSource = (streamer as? IWithVideoSource)?.videoInput?.sourceFlow?.value
             return (videoSource as? ICameraSource)?.settings
         }
 
     val requiredPermissions: List<String>
         get() {
             val permissions = mutableListOf<String>()
-            if (streamer.videoSourceFlow is ICameraSource) {
+            if (streamer.videoInput?.sourceFlow is ICameraSource) {
                 permissions.add(Manifest.permission.CAMERA)
             }
-            if (streamer.audioSourceFlow.value is IAudioRecordSource) {
+            if (streamer.audioInput?.sourceFlow?.value is IAudioRecordSource) {
                 permissions.add(Manifest.permission.RECORD_AUDIO)
             }
             storageRepository.endpointDescriptorFlow.asLiveData().value?.let {
@@ -157,18 +157,27 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch {
             streamerFlow.collect {
                 // Set audio source and video source
-                streamer.setAudioSource(MicrophoneSourceFactory())
-                if (ActivityCompat.checkSelfPermission(
-                        application,
-                        Manifest.permission.CAMERA
-                    ) == PackageManager.PERMISSION_GRANTED
-                ) {
-                    streamer.setVideoSource(CameraSourceFactory())
+                if (streamer.withAudio) {
+                    Log.i(TAG, "Audio source is enabled. Setting audio source")
+                    streamer.setAudioSource(MicrophoneSourceFactory())
+                } else {
+                    Log.i(TAG, "Audio source is disabled")
+                }
+                if (streamer.withVideo) {
+                    if (ActivityCompat.checkSelfPermission(
+                            application,
+                            Manifest.permission.CAMERA
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        streamer.setVideoSource(CameraSourceFactory())
+                    }
+                } else {
+                    Log.i(TAG, "Video source is disabled")
                 }
             }
         }
         viewModelScope.launch {
-            streamer.videoSourceFlow.collect {
+            streamer.videoInput?.sourceFlow?.collect {
                 notifySourceChanged()
             }
         }
@@ -308,7 +317,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun initializeVideoSource() {
         viewModelScope.launch {
-            if (streamer.videoSourceFlow.value == null) {
+            if (streamer.videoInput?.sourceFlow?.value == null) {
                 streamer.setVideoSource(CameraSourceFactory())
             } else {
                 Log.i(TAG, "Camera source already set")
@@ -357,7 +366,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     fun setMute(isMuted: Boolean) {
-        streamer.audioProcessor?.isMuted = !isMuted
+        streamer.audioInput?.isMuted = isMuted
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)
@@ -367,7 +376,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
          * exception instead of crashing. You can either catch the exception or check if the
          * configuration is valid for the new camera with [Context.isFrameRateSupported].
          */
-        val videoSource = streamer.videoSourceFlow.value
+        val videoSource = streamer.videoInput?.sourceFlow?.value
         if (videoSource is ICameraSource) {
             viewModelScope.launch {
                 streamer.toggleBackToFront(application)
@@ -383,7 +392,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
          * exception instead of crashing. You can either catch the exception or check if the
          * configuration is valid for the new camera with [Context.isFrameRateSupported].
          */
-        val videoSource = streamer.videoSourceFlow.value
+        val videoSource = streamer.videoInput?.sourceFlow?.value
         if (videoSource is ICameraSource) {
             viewModelScope.launch {
                 streamer.setNextCameraId(application)
@@ -393,7 +402,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     @RequiresPermission(Manifest.permission.CAMERA)
     fun toggleVideoSource() {
-        val videoSource = streamer.videoSourceFlow.value
+        val videoSource = streamer.videoInput?.sourceFlow?.value
         viewModelScope.launch {
             val nextSource = when (videoSource) {
                 is ICameraSource -> {
@@ -414,7 +423,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
     }
 
-    val isCameraSource = streamer.videoSourceFlow.map { it is ICameraSource }.asLiveData()
+    val isCameraSource = streamer.videoInput?.sourceFlow?.map { it is ICameraSource }?.asLiveData()
 
     val isFlashAvailable = MutableLiveData(false)
     fun toggleFlash() {
@@ -524,7 +533,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
 
     private fun notifySourceChanged() {
-        val videoSource = streamer.videoSourceFlow.value ?: return
+        val videoSource = streamer.videoInput?.sourceFlow?.value ?: return
         if (videoSource is ICameraSource) {
             notifyCameraChanged(videoSource)
         } else {

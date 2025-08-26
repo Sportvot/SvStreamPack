@@ -15,8 +15,12 @@
  */
 package io.github.thibaultbee.streampack.core.streamers.single
 
+import android.Manifest
 import android.content.Context
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.view.Surface
+import androidx.annotation.RequiresPermission
 import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.MediaDescriptor
 import io.github.thibaultbee.streampack.core.elements.encoders.IEncoder
 import io.github.thibaultbee.streampack.core.elements.endpoints.DynamicEndpointFactory
@@ -28,6 +32,7 @@ import io.github.thibaultbee.streampack.core.elements.sources.video.mediaproject
 import io.github.thibaultbee.streampack.core.elements.utils.RotationValue
 import io.github.thibaultbee.streampack.core.elements.utils.extensions.displayRotation
 import io.github.thibaultbee.streampack.core.interfaces.setCameraId
+import io.github.thibaultbee.streampack.core.pipelines.inputs.IVideoInput
 import io.github.thibaultbee.streampack.core.regulator.controllers.IBitrateRegulatorController
 import io.github.thibaultbee.streampack.core.streamers.infos.IConfigurationInfo
 
@@ -40,6 +45,7 @@ import io.github.thibaultbee.streampack.core.streamers.infos.IConfigurationInfo
  * @param endpointFactory the [IEndpointInternal.Factory] implementation. By default, it is a [DynamicEndpointFactory].
  * @param defaultRotation the default rotation in [Surface] rotation ([Surface.ROTATION_0], ...). By default, it is the current device orientation.
  */
+@RequiresPermission(Manifest.permission.CAMERA)
 suspend fun cameraVideoOnlySingleStreamer(
     context: Context,
     cameraId: String = context.defaultCameraId,
@@ -57,11 +63,13 @@ suspend fun cameraVideoOnlySingleStreamer(
  * Creates a [SingleStreamer] with the screen as video source and no audio source.
  *
  * @param context the application context
+ * @param mediaProjection the media projection. It can be obtained with [MediaProjectionManager.getMediaProjection]. Don't forget to call [MediaProjection.stop] when you are done.
  * @param endpointFactory the [IEndpointInternal.Factory] implementation
  * @param defaultRotation the default rotation in [Surface] rotation ([Surface.ROTATION_0], ...). By default, it is the current device orientation.
  */
-suspend fun screenRecorderVideoOnlySingleStreamer(
+suspend fun videoMediaProjectionVideoOnlySingleStreamer(
     context: Context,
+    mediaProjection: MediaProjection,
     endpointFactory: IEndpointInternal.Factory = DynamicEndpointFactory(),
     @RotationValue defaultRotation: Int = context.displayRotation
 ): VideoOnlySingleStreamer {
@@ -70,7 +78,7 @@ suspend fun screenRecorderVideoOnlySingleStreamer(
         endpointFactory = endpointFactory,
         defaultRotation = defaultRotation
     )
-    streamer.setVideoSource(MediaProjectionVideoSourceFactory())
+    streamer.setVideoSource(MediaProjectionVideoSourceFactory(mediaProjection))
     return streamer
 }
 
@@ -125,6 +133,11 @@ class VideoOnlySingleStreamer(
     override val info: IConfigurationInfo
         get() = streamer.info
 
+    override val videoConfigFlow = streamer.videoConfigFlow
+    override val videoEncoder: IEncoder?
+        get() = streamer.videoEncoder
+    override val videoInput: IVideoInput = streamer.videoInput!!
+
     /**
      * Sets the target rotation.
      *
@@ -135,14 +148,6 @@ class VideoOnlySingleStreamer(
 
     override suspend fun setVideoConfig(videoConfig: VideoConfig) =
         streamer.setVideoConfig(videoConfig)
-
-    override val videoConfigFlow = streamer.videoConfigFlow
-    override val videoEncoder: IEncoder?
-        get() = streamer.videoEncoder
-    override val videoSourceFlow = streamer.videoSourceFlow
-
-    override suspend fun setVideoSource(videoSourceFactory: IVideoSourceInternal.Factory) =
-        streamer.setVideoSource(videoSourceFactory)
 
     override fun getInfo(descriptor: MediaDescriptor) = streamer.getInfo(descriptor)
 

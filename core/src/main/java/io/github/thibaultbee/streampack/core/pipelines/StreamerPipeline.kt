@@ -17,34 +17,31 @@ package io.github.thibaultbee.streampack.core.pipelines
 
 import android.content.Context
 import android.graphics.Rect
-import android.util.Size
-import android.view.Surface
 import io.github.thibaultbee.streampack.core.elements.data.ICloseableFrame
 import io.github.thibaultbee.streampack.core.elements.data.RawFrame
 import io.github.thibaultbee.streampack.core.elements.endpoints.DynamicEndpointFactory
 import io.github.thibaultbee.streampack.core.elements.endpoints.IEndpointInternal
-import io.github.thibaultbee.streampack.core.elements.processing.audio.IAudioFrameProcessor
-import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.AbstractSurfaceOutput
+import io.github.thibaultbee.streampack.core.elements.processing.video.DefaultSurfaceProcessorFactory
+import io.github.thibaultbee.streampack.core.elements.processing.video.ISurfaceProcessorInternal
 import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.AspectRatioMode
+import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.ISurfaceOutput
 import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.SurfaceOutput
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.DefaultSourceInfoProvider
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.ISourceInfoProvider
 import io.github.thibaultbee.streampack.core.elements.sources.audio.AudioSourceConfig
-import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSource
-import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSourceInternal
-import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSource
-import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.VideoSourceConfig
 import io.github.thibaultbee.streampack.core.elements.utils.RotationValue
 import io.github.thibaultbee.streampack.core.elements.utils.extensions.displayRotation
 import io.github.thibaultbee.streampack.core.elements.utils.extensions.isCompatibleWith
 import io.github.thibaultbee.streampack.core.elements.utils.extensions.runningHistoryNotNull
+import io.github.thibaultbee.streampack.core.interfaces.IStreamer
 import io.github.thibaultbee.streampack.core.interfaces.IWithAudioSource
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoRotation
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
 import io.github.thibaultbee.streampack.core.logger.Logger
-import io.github.thibaultbee.streampack.core.pipelines.StreamerPipeline.AudioOutputMode
 import io.github.thibaultbee.streampack.core.pipelines.inputs.AudioInput
+import io.github.thibaultbee.streampack.core.pipelines.inputs.IAudioInput
+import io.github.thibaultbee.streampack.core.pipelines.inputs.IVideoInput
 import io.github.thibaultbee.streampack.core.pipelines.inputs.VideoInput
 import io.github.thibaultbee.streampack.core.pipelines.outputs.IAudioCallbackPipelineOutputInternal
 import io.github.thibaultbee.streampack.core.pipelines.outputs.IAudioPipelineOutputInternal
@@ -58,10 +55,12 @@ import io.github.thibaultbee.streampack.core.pipelines.outputs.IPipelineOutput
 import io.github.thibaultbee.streampack.core.pipelines.outputs.IVideoCallbackPipelineOutputInternal
 import io.github.thibaultbee.streampack.core.pipelines.outputs.IVideoPipelineOutputInternal
 import io.github.thibaultbee.streampack.core.pipelines.outputs.IVideoSurfacePipelineOutputInternal
+import io.github.thibaultbee.streampack.core.pipelines.outputs.SurfaceDescriptor
 import io.github.thibaultbee.streampack.core.pipelines.outputs.encoding.EncodingPipelineOutput
 import io.github.thibaultbee.streampack.core.pipelines.outputs.encoding.IConfigurableAudioVideoEncodingPipelineOutput
 import io.github.thibaultbee.streampack.core.pipelines.outputs.encoding.IEncodingPipelineOutput
 import io.github.thibaultbee.streampack.core.pipelines.outputs.isStreaming
+import io.github.thibaultbee.streampack.core.pipelines.utils.MultiException
 import io.github.thibaultbee.streampack.core.pipelines.utils.SourceConfigUtils
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -91,16 +90,17 @@ open class StreamerPipeline(
     val withAudio: Boolean = true,
     val withVideo: Boolean = true,
     private val audioOutputMode: AudioOutputMode = AudioOutputMode.PUSH,
+    surfaceProcessorFactory: ISurfaceProcessorInternal.Factory = DefaultSurfaceProcessorFactory(),
     protected val coroutineDispatcher: CoroutineDispatcher = Dispatchers.Default
-) : IWithVideoSource, IWithVideoRotation, IWithAudioSource {
+) : IWithVideoSource, IWithVideoRotation, IWithAudioSource, IStreamer {
     private val coroutineScope: CoroutineScope = CoroutineScope(coroutineDispatcher)
     private var isReleaseRequested = AtomicBoolean(false)
 
     private val _throwableFlow = MutableStateFlow<Throwable?>(null)
-    val throwableFlow = _throwableFlow.asStateFlow()
+    override val throwableFlow = _throwableFlow.asStateFlow()
 
     // INPUTS
-    private val audioInput = if (withAudio) {
+    private val _audioInput = if (withAudio) {
         when (audioOutputMode) {
             AudioOutputMode.PUSH -> AudioInput(context, AudioInput.PushConfig(::queueAudioFrame))
             AudioOutputMode.CALLBACK -> AudioInput(context, AudioInput.CallbackConfig())
@@ -108,33 +108,15 @@ open class StreamerPipeline(
     } else {
         null
     }
+    override val audioInput: IAudioInput? = _audioInput
 
-    /**
-     * The audio source.
-     * It allows access to advanced audio source settings.
-     */
-    override val audioSourceFlow: StateFlow<IAudioSource?> =
-        audioInput?.audioSourceFlow ?: MutableStateFlow(null)
-
-    /**
-     * The audio processor.
-     * It allows access to advanced audio settings.
-     */
-    override val audioProcessor: IAudioFrameProcessor? = audioInput?.audioProcessor
-
-    private val videoInput = if (withVideo) {
-        VideoInput(context)
+    private val _videoInput = if (withVideo) {
+        VideoInput(context, surfaceProcessorFactory)
     } else {
         null
     }
 
-    /**
-     * The video source.
-     * It allows access to advanced video source settings.
-     */
-    override val videoSourceFlow: StateFlow<IVideoSource?> =
-        videoInput?.videoSourceFlow ?: MutableStateFlow(null)
-
+    override val videoInput: IVideoInput? = _videoInput
 
     private val _isStreamingFlow = MutableStateFlow(false)
 
@@ -143,7 +125,7 @@ open class StreamerPipeline(
      *
      * It is true if a least one input (audio or video) is streaming.
      */
-    val isStreamingFlow: StateFlow<Boolean> = _isStreamingFlow.asStateFlow()
+    override val isStreamingFlow: StateFlow<Boolean> = _isStreamingFlow.asStateFlow()
 
     // OUTPUTS
     private val outputMapMutex = Mutex()
@@ -169,7 +151,7 @@ open class StreamerPipeline(
     init {
         require(withAudio || withVideo) { "At least one of audio or video must be set" }
 
-        videoInput?.let { input ->
+        _videoInput?.let { input ->
             coroutineScope.launch {
                 input.infoProviderFlow.collect {
                     if (isReleaseRequested.get()) {
@@ -179,16 +161,80 @@ open class StreamerPipeline(
                     resetSurfaceProcessorOutputSurface()
                 }
             }
-        }
-    }
+            coroutineScope.launch {
+                input.isStreamingFlow.collect { isStreaming ->
+                    if (isReleaseRequested.get()) {
+                        Logger.w(TAG, "Pipeline is released, dropping video streaming state")
+                        return@collect
+                    }
 
-    override suspend fun setAudioSource(audioSourceFactory: IAudioSourceInternal.Factory) {
-        if (isReleaseRequested.get()) {
-            throw IllegalStateException("Pipeline is released")
+                    if (!isStreaming) {
+                        if (_audioInput?.isStreamingFlow?.value == true) {
+                            Logger.i(TAG, "Video input is stopped: stopping video only outputs")
+                            // Only stops video only output
+                            safeStreamingOutputCall { streamingOutputs ->
+                                streamingOutputs.filter { !it.key.withAudio && it.key.isStreaming }
+                                    .forEach {
+                                        it.value.launch {
+                                            try {
+                                                it.key.stopStream()
+                                            } catch (t: Throwable) {
+                                                Logger.w(
+                                                    TAG,
+                                                    "Stop video only output: Can't stop output $it: ${t.message}"
+                                                )
+                                            }
+                                        }
+                                    }
+                            }
+                        } else {
+                            Logger.i(TAG, "Video input is stopped: stopping all outputs")
+                            // Stops all outputs
+                            _isStreamingFlow.emit(false)
+                            stopOutputStreams()
+                        }
+                    }
+                }
+            }
         }
-        require(withAudio) { "Do not need to set audio as it is a video only streamer" }
-        val input = requireNotNull(audioInput) { "Audio input is not set" }
-        input.setAudioSource(audioSourceFactory)
+
+        _audioInput?.let { input ->
+            coroutineScope.launch {
+                input.isStreamingFlow.collect { isStreaming ->
+                    if (isReleaseRequested.get()) {
+                        Logger.w(TAG, "Pipeline is released, dropping audio streaming state")
+                        return@collect
+                    }
+
+                    if (!isStreaming) {
+                        if (_videoInput?.isStreamingFlow?.value == true) {
+                            Logger.i(TAG, "Audio input is stopped: stopping audio only outputs")
+                            // Stops audio only output
+                            safeStreamingOutputCall { streamingOutputs ->
+                                streamingOutputs.filter { !it.key.withVideo && it.key.isStreaming }
+                                    .forEach {
+                                        it.value.launch {
+                                            try {
+                                                it.key.stopStream()
+                                            } catch (t: Throwable) {
+                                                Logger.w(
+                                                    TAG,
+                                                    "Stop audio only output: Can't stop output $it: ${t.message}"
+                                                )
+                                            }
+                                        }
+                                    }
+                            }
+                        } else {
+                            Logger.i(TAG, "Audio input is stopped: stopping all outputs")
+                            // Stops all outputs
+                            _isStreamingFlow.emit(false)
+                            stopOutputStreams()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private suspend fun setAudioSourceConfig(value: AudioSourceConfig) {
@@ -196,8 +242,8 @@ open class StreamerPipeline(
             throw IllegalStateException("Pipeline is released")
         }
         require(withAudio) { "Do not need to set audio as it is a video only streamer" }
-        val input = requireNotNull(audioInput) { "Audio input is not set" }
-        input.setAudioSourceConfig(value)
+        val input = requireNotNull(_audioInput) { "Audio input is not set" }
+        input.setSourceConfig(value)
     }
 
     private fun queueAudioFrame(frame: RawFrame) {
@@ -208,7 +254,7 @@ open class StreamerPipeline(
         runBlocking {
             safeStreamingOutputCall { streamingOutputs ->
                 val audioStreamingOutput =
-                    streamingOutputs.filterIsInstance<IAudioSyncPipelineOutputInternal>()
+                    streamingOutputs.keys.filterIsInstance<IAudioSyncPipelineOutputInternal>()
                 if (audioStreamingOutput.isEmpty()) {
                     Logger.w(TAG, "No audio streaming output to process the frame")
                     frame.close()
@@ -240,27 +286,13 @@ open class StreamerPipeline(
         }
     }
 
-    /**
-     * Sets the video source.
-     *
-     * The previous video source will be released unless its preview is still running.
-     */
-    override suspend fun setVideoSource(videoSourceFactory: IVideoSourceInternal.Factory) {
-        if (isReleaseRequested.get()) {
-            throw IllegalStateException("Pipeline is released")
-        }
-        require(withVideo) { "Do not need to set video as it is an audio only streamer" }
-        val input = requireNotNull(videoInput) { "Video input is not set" }
-        input.setVideoSource(videoSourceFactory)
-    }
-
     private suspend fun setVideoSourceConfig(value: VideoSourceConfig) {
         if (isReleaseRequested.get()) {
             throw IllegalStateException("Pipeline is released")
         }
         require(withVideo) { "Do not need to set video as it is an audio only streamer" }
-        val input = requireNotNull(videoInput) { "Video input is not set" }
-        input.setVideoSourceConfig(value)
+        val input = requireNotNull(_videoInput) { "Video input is not set" }
+        input.setSourceConfig(value)
     }
 
     // VIDEO PROCESSING
@@ -269,6 +301,7 @@ open class StreamerPipeline(
      * To be called when the source info provider or [isMirroringRequired] is updated.
      */
     private suspend fun resetSurfaceProcessorOutputSurface() {
+        Logger.d(TAG, "Resetting surface processor output surface")
         safeOutputCall { outputs ->
             outputs.keys.filterIsInstance<IVideoSurfacePipelineOutputInternal>()
                 .filter { it.surfaceFlow.value != null }.forEach {
@@ -284,14 +317,12 @@ open class StreamerPipeline(
         videoOutput: IVideoSurfacePipelineOutputInternal
     ) {
         Logger.i(TAG, "Updating transformation")
-        videoOutput.surfaceFlow.value?.let { surfaceWithSize ->
-            videoInput?.removeOutputSurface(surfaceWithSize.surface)
-            videoInput?.let { input ->
+        videoOutput.surfaceFlow.value?.let { surfaceDescriptor ->
+            _videoInput?.removeOutputSurface(surfaceDescriptor.surface)
+            _videoInput?.let { input ->
                 input.addOutputSurface(
                     buildSurfaceOutput(
-                        surfaceWithSize.surface,
-                        surfaceWithSize.resolution,
-                        videoOutput.targetRotation,
+                        surfaceDescriptor,
                         videoOutput::isStreaming,
                         input.infoProviderFlow.value
                     )
@@ -305,23 +336,21 @@ open class StreamerPipeline(
      *
      * Use it for additional processing.
      *
-     * @param surface the encoder surface
-     * @param resolution the resolution of the surface
-     * @param targetRotation the target rotation of the surface
+     * @param surfaceDescriptor the encoder surface
+     * @param isStreaming a lambda to check if the surface is streaming
      * @param infoProvider the source info provider for internal processing
      */
     private fun buildSurfaceOutput(
-        surface: Surface,
-        resolution: Size,
-        @RotationValue targetRotation: Int,
+        surfaceDescriptor: SurfaceDescriptor,
         isStreaming: () -> Boolean,
         infoProvider: ISourceInfoProvider?
-    ): AbstractSurfaceOutput {
-        val cropRect = Rect(0, 0, resolution.width, resolution.height)
+    ): ISurfaceOutput {
+        val cropRect =
+            Rect(0, 0, surfaceDescriptor.resolution.width, surfaceDescriptor.resolution.height)
         return SurfaceOutput(
-            surface, resolution, isStreaming, SurfaceOutput.TransformationInfo(
+            surfaceDescriptor, isStreaming, SurfaceOutput.TransformationInfo(
                 getAspectRatioMode(),
-                targetRotation,
+                surfaceDescriptor.targetRotation,
                 cropRect,
                 isMirroringRequired(),
                 infoProvider ?: DefaultSourceInfoProvider()
@@ -439,7 +468,7 @@ open class StreamerPipeline(
             require(output.streamEventListener == null) { "Output $output already have a listener" }
             output.streamEventListener = object : IPipelineEventOutputInternal.Listener {
                 override suspend fun onStartStream() = withContext(coroutineDispatcher) {
-                    require(audioInput?.audioSourceFlow?.value != null || videoInput?.videoSourceFlow?.value != null) {
+                    require(_audioInput?.sourceFlow?.value != null || _videoInput?.sourceFlow?.value != null) {
                         "At least one audio or video source must be provided"
                     }
                     /**
@@ -449,9 +478,9 @@ open class StreamerPipeline(
                     if (output.withAudio) {
                         require(withAudio) { "Do not need to set audio as it is a video only streamer" }
                         if (output is IConfigurableAudioPipelineOutput) {
-                            val input = requireNotNull(audioInput) { "Audio input is not set" }
+                            val input = requireNotNull(_audioInput) { "Audio input is not set" }
                             val inputSourceConfig =
-                                requireNotNull(input.audioSourceConfigFlow.value) { "Input audio source config is not set" }
+                                requireNotNull(input.sourceConfigFlow.value) { "Input audio source config is not set" }
                             val outputSourceConfig =
                                 requireNotNull(output.audioSourceConfigFlow.value) {
                                     "Output audio source config is not set"
@@ -462,9 +491,9 @@ open class StreamerPipeline(
                     if (output.withVideo) {
                         require(withVideo) { "Do not need to set video as it is an audio only streamer" }
                         if (output is IConfigurableVideoPipelineOutput) {
-                            val input = requireNotNull(videoInput) { "Video input is not set" }
+                            val input = requireNotNull(_videoInput) { "Video input is not set" }
                             val inputSourceConfig =
-                                requireNotNull(input.videoSourceConfigFlow.value) { "Input video source config is not set" }
+                                requireNotNull(input.sourceConfigFlow.value) { "Input video source config is not set" }
                             val outputSourceConfig =
                                 requireNotNull(output.videoSourceConfigFlow.value) {
                                     "Output video codec config is not set"
@@ -478,7 +507,8 @@ open class StreamerPipeline(
                 }
 
                 override suspend fun onStopStream() = withContext(coroutineDispatcher) {
-                    stopInputStreams(output)
+                    Logger.i(TAG, "Stopping output $output")
+                    stopInputStreamsIfNeeded(output)
                 }
             }
         } else {
@@ -489,7 +519,7 @@ open class StreamerPipeline(
                             startInputStreams(output)
                         }
                     } else {
-                        stopInputStreams(output)
+                        stopInputStreamsIfNeeded(output)
                     }
                 }
             }
@@ -497,7 +527,7 @@ open class StreamerPipeline(
 
         if (output is IAudioPipelineOutputInternal) {
             if (withAudio) {
-                val audioInput = requireNotNull(audioInput) { "Audio input is not set" }
+                val audioInput = requireNotNull(_audioInput) { "Audio input is not set" }
                 if (audioOutputMode == AudioOutputMode.CALLBACK) {
                     require(output is IAudioCallbackPipelineOutputInternal) {
                         "Output $output must be an audio callback output"
@@ -529,7 +559,7 @@ open class StreamerPipeline(
 
     private suspend fun buildAudioSourceConfig(newAudioSourceConfig: AudioSourceConfig? = null): AudioSourceConfig {
         val audioSourceConfigs = safeStreamingOutputCall { streamingOutputs ->
-            streamingOutputs.filterIsInstance<IAudioPipelineOutputInternal>().mapNotNull {
+            streamingOutputs.keys.filterIsInstance<IAudioPipelineOutputInternal>().mapNotNull {
                 (it as? IConfigurableAudioPipelineOutputInternal)?.audioSourceConfigFlow?.value
             }.toMutableSet()
         }
@@ -545,7 +575,7 @@ open class StreamerPipeline(
             "Only one audio output is allowed for sync source"
         }
 
-        output.audioFrameRequestedListener = audioInput.audioFrameRequestedListener
+        output.audioFrameRequestedListener = audioInput.frameRequestedListener
     }
 
     private fun addEncodingAudioOutput(
@@ -568,25 +598,27 @@ open class StreamerPipeline(
     ) {
         scope.launch {
             output.surfaceFlow.runningHistoryNotNull()
-                .collect { (previousSurface, newSurface) ->
+                .collect { (previousSurfaceDescriptor, newSurfaceDescriptor) ->
                     Logger.i(TAG, "Surface changed")
-                    if (previousSurface?.surface == newSurface?.surface) {
+                    if (previousSurfaceDescriptor?.surface == newSurfaceDescriptor?.surface) {
                         return@collect
                     }
 
-                    val input = requireNotNull(videoInput) { "Video input is not set" }
+                    val input = requireNotNull(_videoInput) { "Video input is not set" }
 
-                    previousSurface?.let {
-                        Logger.i(TAG, "Removing previous surface: $previousSurface")
+                    previousSurfaceDescriptor?.let {
+                        Logger.i(TAG, "Removing previous surface: $previousSurfaceDescriptor")
                         input.removeOutputSurface(it.surface)
                     }
-                    newSurface?.let {
-                        Logger.i(TAG, "Adding new surface: $newSurface")
+                    if (isReleaseRequested.get()) {
+                        Logger.w(TAG, "Pipeline is released, dropping new surface")
+                        return@collect
+                    }
+                    newSurfaceDescriptor?.let {
+                        Logger.i(TAG, "Adding new surface: $newSurfaceDescriptor")
                         input.addOutputSurface(
                             buildSurfaceOutput(
-                                it.surface,
-                                it.resolution,
-                                output.targetRotation,
+                                it,
                                 output::isStreaming,
                                 input.infoProviderFlow.value
                             )
@@ -615,7 +647,7 @@ open class StreamerPipeline(
     private suspend fun buildVideoSourceConfig(newVideoSourceConfig: VideoSourceConfig? = null): VideoSourceConfig {
         val videoSourceConfigs =
             safeStreamingOutputCall { streamingOutputs ->
-                streamingOutputs.filterIsInstance<IVideoPipelineOutputInternal>()
+                streamingOutputs.keys.filterIsInstance<IVideoPipelineOutputInternal>()
                     .filterIsInstance<IConfigurableVideoPipelineOutputInternal>()
                     .mapNotNull { it.videoSourceConfigFlow.value }.toMutableSet()
             }
@@ -662,7 +694,7 @@ open class StreamerPipeline(
         }
         if (output is IVideoSurfacePipelineOutputInternal) {
             output.surfaceFlow.value?.let {
-                videoInput?.removeOutputSurface(it.surface)
+                _videoInput?.removeOutputSurface(it.surface)
             }
         }
         if (output is IVideoCallbackPipelineOutputInternal) {
@@ -685,9 +717,9 @@ open class StreamerPipeline(
         }
 
         detachOutput(output)
+        outputs[output]?.cancel()
 
         safeOutputCall { outputs ->
-            outputs[output]?.cancel()
             outputs.remove(output)
         }
     }
@@ -696,13 +728,13 @@ open class StreamerPipeline(
         withContext(coroutineDispatcher) {
             Logger.i(TAG, "Starting input streams for output: ${output.javaClass.simpleName}")
             if (output.withAudio) {
-                require(audioSourceFlow.value != null) { "At least one audio source must be provided" }
+                require(_audioInput?.sourceFlow?.value != null) { "At least one audio source must be provided" }
             }
             if (output.withVideo) {
-                require(videoSourceFlow.value != null) { "At least one video source must be provided" }
+                require(_videoInput?.sourceFlow?.value != null) { "At least one video source must be provided" }
             }
             val isAudioSourceStreaming = if (output.withAudio) {
-                val input = requireNotNull(audioInput)
+                val input = requireNotNull(_audioInput)
                 val wasStreaming = input.isStreamingFlow.value
                 Logger.i(TAG, "Starting audio input stream")
                 input.startStream()
@@ -711,7 +743,7 @@ open class StreamerPipeline(
                 false
             }
             if (output.withVideo) {
-                val input = requireNotNull(videoInput)
+                val input = requireNotNull(_videoInput)
                 try {
                     Logger.i(TAG, "Starting video input stream")
                     input.startStream()
@@ -719,7 +751,7 @@ open class StreamerPipeline(
                     Logger.e(TAG, "Failed to start video input stream: ${t.message}", t)
                     // Restore audio source state
                     if (!isAudioSourceStreaming) {
-                        audioInput?.stopStream()
+                        _audioInput?.stopStream()
                     }
                     throw t
                 }
@@ -731,22 +763,31 @@ open class StreamerPipeline(
     /**
      * Try to start all streams.
      *
-     * If an [IEncodingPipelineOutput] is not opened, it won't start the stream.
+     * If an [IEncodingPipelineOutput] is not opened, it won't start the stream and will throw an
+     * exception. But the other outputs will be started.
      */
-    suspend fun startStream() = withContext(coroutineDispatcher) {
-        Logger.i(TAG, "Starting stream")
+    override suspend fun startStream() = withContext(coroutineDispatcher) {
         if (isReleaseRequested.get()) {
             Logger.e(TAG, "Cannot start stream: Pipeline is released")
             throw IllegalStateException("Pipeline is released")
         }
+        val exceptions = mutableListOf<Throwable>()
         safeOutputCall { outputs ->
             outputs.keys.forEach {
                 try {
                     Logger.i(TAG, "Starting output: ${it.javaClass.simpleName}")
                     it.startStream()
                 } catch (t: Throwable) {
-                    Logger.e(TAG, "Failed to start output ${it.javaClass.simpleName}: ${t.message}", t)
+                    exceptions += t
+                    Logger.w(TAG, "startStream: Can't start output $it: ${t.message}")
                 }
+            }
+        }
+        if (exceptions.isNotEmpty()) {
+            if (exceptions.size == 1) {
+                throw exceptions.first()
+            } else {
+                throw MultiException(exceptions)
             }
         }
     }
@@ -758,14 +799,12 @@ open class StreamerPipeline(
         Logger.i(TAG, "Stopping input streams")
         try {
             try {
-                audioInput?.stopStream()
-                Logger.i(TAG, "Audio input stream stopped")
+                _audioInput?.stopStream()
             } catch (t: Throwable) {
                 Logger.e(TAG, "Failed to stop audio input stream: ${t.message}", t)
             }
             try {
-                videoInput?.stopStream()
-                Logger.i(TAG, "Video input stream stopped")
+                _videoInput?.stopStream()
             } catch (t: Throwable) {
                 Logger.e(TAG, "Failed to stop video input stream: ${t.message}", t)
             }
@@ -778,11 +817,11 @@ open class StreamerPipeline(
     /**
      * Stops input streams that are no longer needed.
      */
-    private suspend fun stopInputStreams(output: IPipelineOutput) =
+    private suspend fun stopInputStreamsIfNeeded(output: IPipelineOutput) =
         withContext(coroutineDispatcher) {
             // If sources are not streaming, do nothing
-            var isAudioSourceStreaming = audioInput != null && audioInput.isStreamingFlow.value
-            var isVideoSourceStreaming = videoInput != null && videoInput.isStreamingFlow.value
+            var isAudioSourceStreaming = _audioInput != null && _audioInput.isStreamingFlow.value
+            var isVideoSourceStreaming = _videoInput != null && _videoInput.isStreamingFlow.value
             if (!isAudioSourceStreaming && !isVideoSourceStreaming) {
                 return@withContext
             }
@@ -791,7 +830,7 @@ open class StreamerPipeline(
             if (output.withAudio && getNumOfAudioStreamingOutputSafe(output) == 0) {
                 Logger.d(TAG, "No more audio output. Stopping audio input.")
                 try {
-                    audioInput?.stopStream()
+                    _audioInput?.stopStream()
                 } catch (t: Throwable) {
                     Logger.w(TAG, "stopStream: Can't stop audio input: ${t.message}")
                 }
@@ -800,15 +839,15 @@ open class StreamerPipeline(
             if (output.withVideo && getNumOfVideoStreamingOutputSafe(output) == 0) {
                 Logger.d(TAG, "No more video output. Stopping video input.")
                 try {
-                    videoInput?.stopStream()
+                    _videoInput?.stopStream()
                 } catch (t: Throwable) {
                     Logger.w(TAG, "stopStream: Can't stop video input: ${t.message}")
                 }
             }
 
             // set isStreamingFlow to false if no more inputs are streaming
-            isAudioSourceStreaming = audioInput != null && audioInput.isStreamingFlow.value
-            isVideoSourceStreaming = videoInput != null && videoInput.isStreamingFlow.value
+            isAudioSourceStreaming = _audioInput != null && _audioInput.isStreamingFlow.value
+            isVideoSourceStreaming = _videoInput != null && _videoInput.isStreamingFlow.value
             if (!isAudioSourceStreaming && !isVideoSourceStreaming) {
                 _isStreamingFlow.emit(false)
             }
@@ -816,14 +855,16 @@ open class StreamerPipeline(
 
     private suspend fun stopOutputStreams() {
         /**
-         *  [stopInputStreams] is called when all outputs are stopped.
+         *  [stopInputStreamsIfNeeded] is called when all outputs are stopped.
          */
         safeStreamingOutputCall { outputs ->
             outputs.forEach {
-                try {
-                    it.stopStream()
-                } catch (t: Throwable) {
-                    Logger.w(TAG, "stopStream: Can't stop output $it: ${t.message}")
+                it.value.launch {
+                    try {
+                        it.key.stopStream()
+                    } catch (t: Throwable) {
+                        Logger.w(TAG, "stopStream: Can't stop output $it: ${t.message}")
+                    }
                 }
             }
         }
@@ -834,7 +875,7 @@ open class StreamerPipeline(
      *
      * It stops audio and video sources and calls [IPipelineOutput.stopStream] on all outputs.
      */
-    suspend fun stopStream() = withContext(coroutineDispatcher) {
+    override suspend fun stopStream() = withContext(coroutineDispatcher) {
         if (isReleaseRequested.get()) {
             throw IllegalStateException("Pipeline is released")
         }
@@ -848,12 +889,12 @@ open class StreamerPipeline(
 
     private suspend fun releaseSources() {
         try {
-            audioInput?.release()
+            _audioInput?.release()
         } catch (t: Throwable) {
             Logger.w(TAG, "release: Can't release audio input: ${t.message}")
         }
         try {
-            videoInput?.release()
+            _videoInput?.release()
         } catch (t: Throwable) {
             Logger.w(TAG, "release: Can't release video input: ${t.message}")
         }
@@ -865,10 +906,12 @@ open class StreamerPipeline(
      * It releases the audio and video sources and the processors.
      * It also calls [IPipelineOutput.release] on all outputs.
      */
-    suspend fun release() = withContext(coroutineDispatcher) {
+    override suspend fun release() = withContext(coroutineDispatcher) {
         if (isReleaseRequested.getAndSet(true)) {
             Logger.w(TAG, "Already released")
+            return@withContext
         }
+        Logger.d(TAG, "Releasing pipeline")
 
         // Sources
         try {
@@ -877,6 +920,7 @@ open class StreamerPipeline(
             Logger.w(TAG, "release: Can't release sources: ${t.message}")
         }
 
+        Logger.d(TAG, "Sources released")
         // Outputs
         safeOutputCall { outputs ->
             outputs.entries.forEach { (output, scope) ->
@@ -904,9 +948,9 @@ open class StreamerPipeline(
             }
         }
 
-    private suspend fun <T> safeStreamingOutputCall(block: suspend (List<IPipelineOutput>) -> T) =
+    private suspend fun <T> safeStreamingOutputCall(block: suspend (Map<IPipelineOutput, CoroutineScope>) -> T) =
         safeOutputCall { outputs ->
-            val streamingOutputs = outputs.keys.filter { it.isStreamingFlow.value }
+            val streamingOutputs = outputs.filter { it.key.isStreamingFlow.value }
             block(streamingOutputs)
         }
 

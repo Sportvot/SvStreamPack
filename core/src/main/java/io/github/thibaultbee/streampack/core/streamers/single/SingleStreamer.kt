@@ -17,7 +17,11 @@ package io.github.thibaultbee.streampack.core.streamers.single
 
 import android.Manifest
 import android.content.Context
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.view.Surface
+import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.MediaDescriptor
 import io.github.thibaultbee.streampack.core.elements.encoders.IEncoder
@@ -26,6 +30,7 @@ import io.github.thibaultbee.streampack.core.elements.endpoints.DynamicEndpointF
 import io.github.thibaultbee.streampack.core.elements.endpoints.IEndpoint
 import io.github.thibaultbee.streampack.core.elements.endpoints.IEndpointInternal
 import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSourceInternal
+import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MediaProjectionAudioSourceFactory
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MicrophoneSourceFactory
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSource
@@ -53,6 +58,7 @@ import kotlinx.coroutines.flow.StateFlow
  * @param endpointFactory the [IEndpointInternal.Factory] implementation. By default, it is a [DynamicEndpointFactory].
  * @param defaultRotation the default rotation in [Surface] rotation ([Surface.ROTATION_0], ...). By default, it is the current device orientation.
  */
+@RequiresPermission(Manifest.permission.CAMERA)
 suspend fun cameraSingleStreamer(
     context: Context,
     cameraId: String = context.defaultCameraId,
@@ -71,15 +77,45 @@ suspend fun cameraSingleStreamer(
 }
 
 /**
+ * Creates a [SingleStreamer] with the screen as video source and audio playback as audio source.
+ *
+ * @param context the application context
+ * @param mediaProjection the media projection. It can be obtained with [MediaProjectionManager.getMediaProjection]. Don't forget to call [MediaProjection.stop] when you are done.
+ * @param endpointFactory the [IEndpointInternal.Factory] implementation. By default, it is a [DynamicEndpointFactory].
+ * @param defaultRotation the default rotation in [Surface] rotation ([Surface.ROTATION_0], ...). By default, it is the current device orientation.
+ */
+@RequiresApi(Build.VERSION_CODES.Q)
+suspend fun audioVideoMediaProjectionSingleStreamer(
+    context: Context,
+    mediaProjection: MediaProjection,
+    endpointFactory: IEndpointInternal.Factory = DynamicEndpointFactory(),
+    @RotationValue defaultRotation: Int = context.displayRotation
+): SingleStreamer {
+    val streamer = SingleStreamer(
+        context = context,
+        endpointFactory = endpointFactory,
+        withAudio = true,
+        withVideo = true,
+        defaultRotation = defaultRotation
+    )
+
+    streamer.setVideoSource(MediaProjectionVideoSourceFactory(mediaProjection))
+    streamer.setAudioSource(MediaProjectionAudioSourceFactory(mediaProjection))
+    return streamer
+}
+
+/**
  * Creates a [SingleStreamer] with the screen as video source and an audio source (by default, the microphone).
  *
  * @param context the application context
+ * @param mediaProjection the media projection. It can be obtained with [MediaProjectionManager.getMediaProjection]. Don't forget to call [MediaProjection.stop] when you are done.
  * @param audioSourceFactory the audio source factory. By default, it is the default microphone source factory. If set to null, you will have to set it later explicitly.
  * @param endpointFactory the [IEndpointInternal.Factory] implementation. By default, it is a [DynamicEndpointFactory].
  * @param defaultRotation the default rotation in [Surface] rotation ([Surface.ROTATION_0], ...). By default, it is the current device orientation.
  */
-suspend fun screenRecorderSingleStreamer(
+suspend fun videoMediaProjectionSingleStreamer(
     context: Context,
+    mediaProjection: MediaProjection,
     audioSourceFactory: IAudioSourceInternal.Factory? = MicrophoneSourceFactory(),
     endpointFactory: IEndpointInternal.Factory = DynamicEndpointFactory(),
     @RotationValue defaultRotation: Int = context.displayRotation
@@ -88,9 +124,11 @@ suspend fun screenRecorderSingleStreamer(
         context = context,
         endpointFactory = endpointFactory,
         withAudio = true,
+        withVideo = true,
         defaultRotation = defaultRotation
     )
-    streamer.setVideoSource(MediaProjectionVideoSourceFactory())
+
+    streamer.setVideoSource(MediaProjectionVideoSourceFactory(mediaProjection))
     if (audioSourceFactory != null) {
         streamer.setAudioSource(audioSourceFactory)
     }
@@ -172,11 +210,11 @@ open class SingleStreamer(
 
     // AUDIO
     /**
-     * The audio source.
+     * The audio input.
      * It allows advanced audio source settings.
      */
-    override val audioSourceFlow = pipeline.audioSourceFlow
-    override val audioProcessor = pipeline.audioProcessor
+    override val audioInput = pipeline.audioInput
+
     override val audioEncoder: IEncoder?
         get() = pipelineOutput.audioEncoder
 
@@ -185,15 +223,13 @@ open class SingleStreamer(
 
     // VIDEO
     /**
-     * The video source.
+     * The video input.
      * It allows advanced video source settings.
      */
-    override val videoSourceFlow = pipeline.videoSourceFlow
+    override val videoInput = pipeline.videoInput
+
     override val videoEncoder: IEncoder?
         get() = pipelineOutput.videoEncoder
-
-    override suspend fun setVideoSource(videoSourceFactory: IVideoSourceInternal.Factory) =
-        pipeline.setVideoSource(videoSourceFactory)
 
     // ENDPOINT
     override val endpoint: IEndpoint
@@ -216,7 +252,7 @@ open class SingleStreamer(
      * In this case, prefer using [getInfo] with the [MediaDescriptor] used in [open].
      */
     override val info: IConfigurationInfo
-        get() = if (videoSourceFlow.value is CameraSource) {
+        get() = if (videoInput?.sourceFlow?.value is CameraSource) {
             CameraStreamerConfigurationInfo(endpoint.info)
         } else {
             StreamerConfigurationInfo(endpoint.info)
@@ -236,7 +272,7 @@ open class SingleStreamer(
         } catch (_: Throwable) {
             endpoint.getInfo(descriptor)
         }
-        return if (videoSourceFlow.value is CameraSource) {
+        return if (videoInput?.sourceFlow?.value is CameraSource) {
             CameraStreamerConfigurationInfo(endpointInfo)
         } else {
             StreamerConfigurationInfo(endpointInfo)

@@ -15,8 +15,12 @@
  */
 package io.github.thibaultbee.streampack.core.streamers.dual
 
+import android.Manifest
 import android.content.Context
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.view.Surface
+import androidx.annotation.RequiresPermission
 import io.github.thibaultbee.streampack.core.elements.endpoints.DynamicEndpointFactory
 import io.github.thibaultbee.streampack.core.elements.endpoints.IEndpointInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
@@ -25,6 +29,7 @@ import io.github.thibaultbee.streampack.core.elements.sources.video.mediaproject
 import io.github.thibaultbee.streampack.core.elements.utils.RotationValue
 import io.github.thibaultbee.streampack.core.elements.utils.extensions.displayRotation
 import io.github.thibaultbee.streampack.core.interfaces.setCameraId
+import io.github.thibaultbee.streampack.core.pipelines.inputs.IVideoInput
 import io.github.thibaultbee.streampack.core.pipelines.outputs.encoding.IConfigurableVideoEncodingPipelineOutput
 
 
@@ -37,6 +42,7 @@ import io.github.thibaultbee.streampack.core.pipelines.outputs.encoding.IConfigu
  * @param secondEndpointFactory the [IEndpointInternal.Factory] implementation of the second output. By default, it is a [DynamicEndpointFactory].
  * @param defaultRotation the default rotation in [Surface] rotation ([Surface.ROTATION_0], ...). By default, it is the current device orientation.
  */
+@RequiresPermission(Manifest.permission.CAMERA)
 suspend fun cameraVideoOnlyDualStreamer(
     context: Context,
     cameraId: String = context.defaultCameraId,
@@ -55,12 +61,14 @@ suspend fun cameraVideoOnlyDualStreamer(
  * Creates a [DualStreamer] with the screen as video source and no audio source.
  *
  * @param context the application context
+ * @param mediaProjection the media projection. It can be obtained with [MediaProjectionManager.getMediaProjection]. Don't forget to call [MediaProjection.stop] when you are done.
  * @param firstEndpointFactory the [IEndpointInternal.Factory] implementation of the first output. By default, it is a [DynamicEndpointFactory].
  * @param secondEndpointFactory the [IEndpointInternal.Factory] implementation of the second output. By default, it is a [DynamicEndpointFactory].
  * @param defaultRotation the default rotation in [Surface] rotation ([Surface.ROTATION_0], ...). By default, it is the current device orientation.
  */
-suspend fun screenRecorderVideoOnlyDualStreamer(
+suspend fun videoMediaProjectionVideoOnlyDualStreamer(
     context: Context,
+    mediaProjection: MediaProjection,
     firstEndpointFactory: IEndpointInternal.Factory = DynamicEndpointFactory(),
     secondEndpointFactory: IEndpointInternal.Factory = DynamicEndpointFactory(),
     @RotationValue defaultRotation: Int = context.displayRotation
@@ -71,7 +79,7 @@ suspend fun screenRecorderVideoOnlyDualStreamer(
         secondEndpointFactory = secondEndpointFactory,
         defaultRotation = defaultRotation
     )
-    streamer.setVideoSource(MediaProjectionVideoSourceFactory())
+    streamer.setVideoSource(MediaProjectionVideoSourceFactory(mediaProjection))
     return streamer
 }
 
@@ -102,7 +110,7 @@ suspend fun VideoOnlyDualStreamer(
 }
 
 /**
- * A [ISingleStreamer] implementation for video only (without audio).
+ * A [IDualStreamer] implementation for video only (without audio).
  *
  * @param context the application context
  * @param firstEndpointFactory the [IEndpointInternal.Factory] implementation of the first output. By default, it is a [DynamicEndpointFactory].
@@ -131,6 +139,8 @@ class VideoOnlyDualStreamer(
     override val isOpenFlow = streamer.isOpenFlow
     override val isStreamingFlow = streamer.isStreamingFlow
 
+    override val videoInput: IVideoInput = streamer.videoInput!!
+
     /**
      * Sets the target rotation.
      *
@@ -141,11 +151,6 @@ class VideoOnlyDualStreamer(
 
     override suspend fun setVideoConfig(videoConfig: DualStreamerVideoConfig) =
         streamer.setVideoConfig(videoConfig)
-
-    override val videoSourceFlow = streamer.videoSourceFlow
-
-    override suspend fun setVideoSource(videoSourceFactory: IVideoSourceInternal.Factory) =
-        streamer.setVideoSource(videoSourceFactory)
 
     override suspend fun close() = streamer.close()
 

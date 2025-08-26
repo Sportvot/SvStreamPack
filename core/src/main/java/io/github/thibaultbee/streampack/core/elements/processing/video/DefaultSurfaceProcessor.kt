@@ -6,15 +6,15 @@ import android.os.HandlerThread
 import android.util.Size
 import android.view.Surface
 import androidx.concurrent.futures.CallbackToFutureAdapter
-import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.AbstractSurfaceOutput
+import com.google.common.util.concurrent.ListenableFuture
+import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.ISurfaceOutput
 import io.github.thibaultbee.streampack.core.elements.processing.video.utils.GLUtils
 import io.github.thibaultbee.streampack.core.elements.utils.av.video.DynamicRangeProfile
 import io.github.thibaultbee.streampack.core.logger.Logger
-import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
 
 
-class SurfaceProcessor(
+private class DefaultSurfaceProcessor(
     private val dynamicRangeProfile: DynamicRangeProfile
 ) : ISurfaceProcessorInternal, SurfaceTexture.OnFrameAvailableListener {
     private val renderer = OpenGlRenderer()
@@ -25,7 +25,7 @@ class SurfaceProcessor(
     private val textureMatrix = FloatArray(16)
     private val surfaceOutputMatrix = FloatArray(16)
 
-    private val surfaceOutputs: MutableList<AbstractSurfaceOutput> = mutableListOf()
+    private val surfaceOutputs: MutableList<ISurfaceOutput> = mutableListOf()
     private val surfaceInputs: MutableList<SurfaceInput> = mutableListOf()
     private val surfaceInputsTimestampInNsMap: MutableMap<SurfaceTexture, Long> = hashMapOf()
 
@@ -88,14 +88,14 @@ class SurfaceProcessor(
         }
     }
 
-    override fun addOutputSurface(surfaceOutput: AbstractSurfaceOutput) {
+    override fun addOutputSurface(surfaceOutput: ISurfaceOutput) {
         if (isReleaseRequested.get()) {
             return
         }
 
         executeSafely {
             if (!surfaceOutputs.contains(surfaceOutput)) {
-                renderer.registerOutputSurface(surfaceOutput.surface)
+                renderer.registerOutputSurface(surfaceOutput.descriptor.surface)
                 surfaceOutputs.add(surfaceOutput)
             } else {
                 Logger.w(TAG, "Surface already added")
@@ -103,16 +103,16 @@ class SurfaceProcessor(
         }
     }
 
-    private fun removeOutputSurfaceInternal(surfaceOutput: AbstractSurfaceOutput) {
+    private fun removeOutputSurfaceInternal(surfaceOutput: ISurfaceOutput) {
         if (surfaceOutputs.contains(surfaceOutput)) {
-            renderer.unregisterOutputSurface(surfaceOutput.surface)
+            renderer.unregisterOutputSurface(surfaceOutput.descriptor.surface)
             surfaceOutputs.remove(surfaceOutput)
         } else {
             Logger.w(TAG, "Surface not found")
         }
     }
 
-    override fun removeOutputSurface(surfaceOutput: AbstractSurfaceOutput) {
+    override fun removeOutputSurface(surfaceOutput: ISurfaceOutput) {
         if (isReleaseRequested.get()) {
             return
         }
@@ -128,7 +128,8 @@ class SurfaceProcessor(
         }
 
         executeSafely {
-            val surfaceOutput = surfaceOutputs.firstOrNull { it.surface == surface }
+            val surfaceOutput =
+                surfaceOutputs.firstOrNull { it.descriptor.surface == surface }
             if (surfaceOutput != null) {
                 removeOutputSurfaceInternal(surfaceOutput)
             } else {
@@ -139,7 +140,7 @@ class SurfaceProcessor(
 
     private fun removeAllOutputSurfacesInternal() {
         surfaceOutputs.forEach { surfaceOutput ->
-            renderer.unregisterOutputSurface(surfaceOutput.surface)
+            renderer.unregisterOutputSurface(surfaceOutput.descriptor.surface)
         }
         surfaceOutputs.clear()
     }
@@ -191,7 +192,12 @@ class SurfaceProcessor(
         surfaceOutputs.filter { it.isStreaming() }.forEach {
             try {
                 it.updateTransformMatrix(surfaceOutputMatrix, textureMatrix)
-                renderer.render(timestamp, surfaceOutputMatrix, it.surface, it.viewportRect)
+                renderer.render(
+                    timestamp,
+                    surfaceOutputMatrix,
+                    it.descriptor.surface,
+                    it.viewportRect
+                )
             } catch (t: Throwable) {
                 Logger.e(TAG, "Error while rendering frame", t)
             }
@@ -226,7 +232,7 @@ class SurfaceProcessor(
         }
     }
 
-    private fun <T> submitSafely(block: () -> T): Future<T> {
+    private fun <T : Any> submitSafely(block: () -> T): ListenableFuture<T> {
         return CallbackToFutureAdapter.getFuture {
             executeSafely(block, { result -> it.set(result) }, { t -> it.setException(t) })
         }
@@ -237,4 +243,10 @@ class SurfaceProcessor(
     }
 
     private data class SurfaceInput(val surface: Surface, val surfaceTexture: SurfaceTexture)
+}
+
+class DefaultSurfaceProcessorFactory : ISurfaceProcessorInternal.Factory {
+    override fun create(dynamicRangeProfile: DynamicRangeProfile): ISurfaceProcessorInternal {
+        return DefaultSurfaceProcessor(dynamicRangeProfile)
+    }
 }
