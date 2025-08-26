@@ -49,11 +49,12 @@ import android.widget.Toast
 import android.widget.TextView
 import android.widget.Button
 import android.content.Context
+import android.webkit.WebView
 
 class PreviewFragment : Fragment(R.layout.main_fragment) {
     private lateinit var binding: MainFragmentBinding
-    private var isOverlayVisible = false
-    private var isScoringVisible = false
+    private var isOverlayVisible = true
+    private var isScoringVisible = true
 
     private val previewViewModel: PreviewViewModel by viewModels {
         PreviewViewModelFactory(requireActivity().application)
@@ -75,38 +76,47 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         val matchId = arguments?.getString(StudioConstants.MATCH_ID_KEY)
         val refreshId = arguments?.getString(StudioConstants.REFRESH_ID_KEY)
         val refreshToken = arguments?.getString(StudioConstants.REFRESH_TOKEN_KEY)
+
+        fun setupWebView(webView: WebView, url: String) {
+            webView.visibility = View.VISIBLE
+            webView.setBackgroundColor(Color.TRANSPARENT)
+            webView.webViewClient = WebViewClient()
+            webView.settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                useWideViewPort = true
+                loadWithOverviewMode = true
+                setSupportZoom(true)
+                builtInZoomControls = true
+                displayZoomControls = false
+                mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            }
+            android.webkit.WebView.setWebContentsDebuggingEnabled(true)
+            webView.loadUrl(url)
+        }
+
+        // Show scoring WebView on fragment open
+        val scoringQuery = listOfNotNull(
+            refreshId?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }?.let { "refreshId=$it" },
+            refreshToken?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }?.let { "refreshToken=$it" }
+        ).joinToString("&")
+        val scoringUrl = "${StudioConstants.SCORING_OVERLAY_URL}/$matchId" + if (scoringQuery.isNotEmpty()) "?$scoringQuery" else ""
+        setupWebView(binding.scoringWebView, scoringUrl)
+        isScoringVisible = true
+
+        // Show overlay WebView on fragment open
+        val overlayUrl = "${StudioConstants.OVERLAY_URL}/preview/$matchId"
+        setupWebView(binding.overlayWebView, overlayUrl)
+        isOverlayVisible = true
+
+        // Button click logic (toggle)
         binding.toggleScoringButton.setOnClickListener {
             if (binding.scoringWebView.visibility == View.VISIBLE) {
                 binding.scoringWebView.visibility = View.GONE
                 binding.scoringWebView.loadUrl("about:blank")
                 isScoringVisible = false
             } else {
-                binding.scoringWebView.visibility = View.VISIBLE
-                binding.scoringWebView.setBackgroundColor(Color.TRANSPARENT)
-                binding.scoringWebView.webViewClient = WebViewClient()
-                binding.scoringWebView.settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    useWideViewPort = true
-                    loadWithOverviewMode = true
-                    setSupportZoom(true)
-                    builtInZoomControls = true
-                    displayZoomControls = false
-                    mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                }
-                android.webkit.WebView.setWebContentsDebuggingEnabled(true)
-
-                val query = listOfNotNull(
-                    refreshId?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
-                        ?.let { "refreshId=$it" },
-                    refreshToken?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
-                        ?.let { "refreshToken=$it" }
-                ).joinToString("&")
-                val url =
-                    "${StudioConstants.SCORING_OVERLAY_URL}/$matchId" + if (query.isNotEmpty()) "?$query" else ""
-
-                Log.i("SCORING_URL", url)
-                binding.scoringWebView.loadUrl(url)
+                setupWebView(binding.scoringWebView, scoringUrl)
                 isScoringVisible = true
             }
             updateScoringButtonHighlight()
@@ -118,44 +128,18 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 binding.overlayWebView.loadUrl("about:blank")
                 isOverlayVisible = false
             } else {
-                binding.overlayWebView.visibility = View.VISIBLE
-                binding.overlayWebView.setBackgroundColor(Color.TRANSPARENT)
-                binding.overlayWebView.webViewClient = WebViewClient()
-                binding.overlayWebView.settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    useWideViewPort = true
-                    loadWithOverviewMode = true
-                    setSupportZoom(true)
-                    builtInZoomControls = true
-                    displayZoomControls = false
-                    mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                }
-                android.webkit.WebView.setWebContentsDebuggingEnabled(true)
-                val url = "${StudioConstants.OVERLAY_URL}/preview/$matchId"
-
-                Log.i("SCORING_URL OVERLAY", url)
-                binding.overlayWebView.loadUrl(url)
+                setupWebView(binding.overlayWebView, overlayUrl)
                 isOverlayVisible = true
             }
             updateOverlayButtonHighlight()
         }
 
         binding.showCopyScoringUrlButton?.setOnClickListener {
-            val matchId = arguments?.getString(StudioConstants.MATCH_ID_KEY)
-            val refreshId = arguments?.getString(StudioConstants.REFRESH_ID_KEY)
-            val refreshToken = arguments?.getString(StudioConstants.REFRESH_TOKEN_KEY)
-            val query = listOfNotNull(
-                refreshId?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
-                    ?.let { "refreshId=$it" },
-                refreshToken?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
-                    ?.let { "refreshToken=$it" }
-            ).joinToString("&")
-            val url = "${StudioConstants.SCORING_OVERLAY_URL}/$matchId" + if (query.isNotEmpty()) "?$query" else ""
+            val url = scoringUrl
             val ottUrl = "${StudioConstants.OTT_URL}/stream/$matchId"
             showCopyLinkDialog(ottUrl, url)
         }
-        // Ensure button highlight is correct on view creation
+
         updateOverlayButtonHighlight()
         updateScoringButtonHighlight()
     }

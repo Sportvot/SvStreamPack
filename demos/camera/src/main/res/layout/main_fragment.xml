@@ -32,14 +32,14 @@
             android:id="@+id/overlayWebView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone"
+            android:visibility="visible"
             android:background="@android:color/transparent" />
 
         <WebView
             android:id="@+id/scoringWebView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone"
+            android:visibility="visible"
             android:background="@android:color/transparent" />
 
         <LinearLayout
@@ -190,8 +190,8 @@
 
             <ImageButton
                 android:id="@+id/toggleOverlayButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="42dp"
+                android:layout_height="38dp"
                 android:contentDescription="@string/toggle_overlay"
                 android:src="@drawable/ic_overlay_24"
                 android:alpha="0.6"
@@ -199,8 +199,8 @@
 
             <ImageButton
                 android:id="@+id/toggleScoringButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="42dp"
+                android:layout_height="38dp"
                 android:contentDescription="@string/toggle_scoring"
                 android:src="@drawable/ic_scoring_25"
                 android:alpha="0.6"
