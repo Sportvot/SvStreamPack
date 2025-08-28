@@ -265,7 +265,7 @@
                 android:textOff=""
                 android:textOn=""
                 android:alpha="0.6"
-                android:checked="@{!viewmodel.streamerLiveData.audioProcessor.muted}"
+                android:checked="@{!viewmodel.isMuted}"
                 app:tint="@android:color/white" />
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>

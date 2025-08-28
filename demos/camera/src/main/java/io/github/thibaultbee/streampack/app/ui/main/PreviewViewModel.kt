@@ -93,6 +93,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private val testBitmap =
         BitmapFactory.decodeResource(application.resources, R.drawable.img_test)
 
+    private val _isMuted = MutableLiveData(false)
+    val isMuted: LiveData<Boolean> = _isMuted
+
     /**
      * Camera settings.
      */
@@ -367,6 +370,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun setMute(isMuted: Boolean) {
         streamer.audioInput?.isMuted = isMuted
+        _isMuted.value = isMuted
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)
