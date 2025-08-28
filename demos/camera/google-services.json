@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "889972951792",
+    "project_id": "sv-streaming-app",
+    "storage_bucket": "sv-streaming-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:889972951792:android:aaf6190552e61e301b9035",
+        "android_client_info": {
+          "package_name": "io.github.thibaultbee.streampack.sample"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAKg-kKeS7ORwq1QBHCVs1s-UAL5596o78"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

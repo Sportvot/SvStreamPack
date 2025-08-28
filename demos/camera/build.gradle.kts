@@ -2,6 +2,11 @@ plugins {
     id(libs.plugins.android.application.get().pluginId)
     alias(libs.plugins.kotlin.android)
     id(libs.plugins.kotlin.kapt.get().pluginId)
+
+    // 🔹 Add Firebase plugins
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
+
 }
 
 android {
@@ -63,6 +68,15 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.datastore)
     implementation("androidx.webkit:webkit:1.10.0")
+
+    // Firebase BoM (still optional)
+    implementation(platform("com.google.firebase:firebase-bom:31.2.3")) // older BOM
+
+    // Crashlytics compatible with minSdk 21
+    implementation("com.google.firebase:firebase-crashlytics:18.3.7")
+
+    // Analytics (optional)
+    implementation("com.google.firebase:firebase-analytics:21.2.0")
 
     testImplementation(libs.junit)
 
