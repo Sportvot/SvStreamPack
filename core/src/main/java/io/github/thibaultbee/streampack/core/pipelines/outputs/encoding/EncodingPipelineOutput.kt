@@ -58,6 +58,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.PriorityBlockingQueue
 
 /**
  * An implementation of [IEncodingPipelineOutputInternal] that manages encoding and endpoint for
@@ -199,6 +200,83 @@ internal class EncodingPipelineOutput(
     override var streamEventListener: IPipelineEventOutputInternal.Listener? = null
 
     /**
+     * Circular buffer to handle back pressure between encoders and endpoint
+     */
+    private class CircularBuffer(
+        private val capacity: Int,
+        private val isAudio: Boolean
+    ) {
+        private val buffer = PriorityBlockingQueue<Frame>(capacity) { f1, f2 ->
+            f1.ptsInUs.compareTo(f2.ptsInUs)
+        }
+        
+        private var lastFrameTime: Long = 0
+        private var frameInterval: Long = 0
+        
+        fun setFrameRate(rate: Int) {
+            frameInterval = if (isAudio) {
+                // For audio, calculate interval based on samples per frame
+                // Assuming 48kHz sample rate and 1024 samples per frame
+                (1000000L * 1024) / rate
+            } else {
+                // For video, calculate interval based on frame rate
+                (1000000L / rate)
+            }
+            Logger.d("CIRCULAR_BUFFER", "Set ${if (isAudio) "audio" else "video"} frame rate to $rate Hz (interval: ${frameInterval}µs)")
+        }
+
+        fun offer(frame: Frame): Boolean {
+            if (buffer.size >= capacity) {
+                // Buffer is full, drop the oldest frame
+                buffer.poll()?.close()
+                Logger.d("CIRCULAR_BUFFER", "${if (isAudio) "Audio" else "Video"} buffer full, dropped oldest frame")
+            }
+
+            // Only adjust timestamps for video frames
+            if (!isAudio && lastFrameTime > 0 && frameInterval > 0) {
+                val expectedTime = lastFrameTime + frameInterval
+                if (frame.ptsInUs < expectedTime) {
+                    // Frame is too early, adjust its timestamp
+                    frame.ptsInUs = expectedTime
+                    Logger.d("CIRCULAR_BUFFER", "Adjusted video frame timestamp to $expectedTime")
+                }
+            }
+            
+            lastFrameTime = frame.ptsInUs
+            val result = buffer.offer(frame)
+            Logger.d("CIRCULAR_BUFFER", "${if (isAudio) "Audio" else "Video"} buffer size: ${buffer.size}/$capacity")
+            return result
+        }
+
+        fun poll(): Frame? {
+            val frame = buffer.poll()
+            if (frame != null) {
+                Logger.d("CIRCULAR_BUFFER", "${if (isAudio) "Audio" else "Video"} frame polled, remaining: ${buffer.size}")
+            }
+            return frame
+        }
+        
+        fun peek(): Frame? = buffer.peek()
+        
+        fun size(): Int = buffer.size
+        
+        fun isEmpty(): Boolean = buffer.isEmpty()
+        
+        fun isFull(): Boolean = buffer.size >= capacity
+        
+        fun clear() {
+            val size = buffer.size
+            buffer.forEach { it.close() }
+            buffer.clear()
+            lastFrameTime = 0
+            Logger.d("CIRCULAR_BUFFER", "Cleared ${if (isAudio) "audio" else "video"} buffer (dropped $size frames)")
+        }
+    }
+
+    private val audioBuffer = if (withAudio) CircularBuffer(30, true) else null
+    private val videoBuffer = if (withVideo) CircularBuffer(30, false) else null
+
+    /**
      * Manages error on stream.
      * Stops only stream.
      *
@@ -227,7 +305,18 @@ internal class EncodingPipelineOutput(
         override fun onOutputFrame(frame: Frame) {
             audioStreamId?.let {
                 runBlocking {
-                    this@EncodingPipelineOutput.endpointInternal.write(frame, it)
+                    if (audioBuffer?.offer(frame) == true) {
+                        // Only process frames if buffer is full
+                        if (audioBuffer.isFull()) {
+                            Logger.d("CIRCULAR_BUFFER", "Audio buffer full, processing frames")
+                            while (!audioBuffer.isEmpty()) {
+                                val bufferedFrame = audioBuffer.poll()
+                                if (bufferedFrame != null) {
+                                    this@EncodingPipelineOutput.endpointInternal.write(bufferedFrame, it)
+                                }
+                            }
+                        }
+                    }
                 }
             } ?: Logger.w(TAG, "Audio frame received but audio stream is not set")
         }
@@ -241,7 +330,18 @@ internal class EncodingPipelineOutput(
         override fun onOutputFrame(frame: Frame) {
             videoStreamId?.let {
                 runBlocking {
-                    this@EncodingPipelineOutput.endpointInternal.write(frame, it)
+                    if (videoBuffer?.offer(frame) == true) {
+                        // Only process frames if buffer is full
+                        if (videoBuffer.isFull()) {
+                            Logger.d("CIRCULAR_BUFFER", "Video buffer full, processing frames")
+                            while (!videoBuffer.isEmpty()) {
+                                val bufferedFrame = videoBuffer.poll()
+                                if (bufferedFrame != null) {
+                                    this@EncodingPipelineOutput.endpointInternal.write(bufferedFrame, it)
+                                }
+                            }
+                        }
+                    }
                 }
             } ?: Logger.w(TAG, "Video frame received but video stream is not set")
         }
@@ -263,6 +363,8 @@ internal class EncodingPipelineOutput(
         withContext(coroutineDispatcher) {
             audioConfigurationMutex.withLock {
                 setAudioCodecConfigInternal(audioCodecConfig)
+                // Set frame rate for audio buffer
+                audioBuffer?.setFrameRate(audioCodecConfig.sampleRate)
             }
         }
     }
@@ -351,6 +453,8 @@ internal class EncodingPipelineOutput(
         withContext(coroutineDispatcher) {
             videoConfigurationMutex.withLock {
                 setVideoCodecConfigInternal(videoCodecConfig)
+                // Set frame rate for video buffer
+                videoBuffer?.setFrameRate(videoCodecConfig.fps)
             }
         }
     }
@@ -650,6 +754,10 @@ internal class EncodingPipelineOutput(
         }
 
         _isStreamingFlow.emit(false)
+
+        // Clear buffers
+        audioBuffer?.clear()
+        videoBuffer?.clear()
 
         // Encoders
         audioConfigurationMutex.withLock {
